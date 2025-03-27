@@ -1,5 +1,3 @@
-const func_char = "@";
-
 interface Definition {
 	param: string;
 	body: Application;
@@ -17,6 +15,7 @@ class Program {
 	}
 }
 
+const func_char = "@";
 function parseString(code: string): Application {
 	const applicationFrame: Application = [];
 	for (let i = 0; i < code.length; i++) {
