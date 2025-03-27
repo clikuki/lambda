@@ -13,6 +13,10 @@ class Program {
 	betaReduce() {
 		// TODO: Implement beta reduction
 	}
+
+	toString() {
+		return stringifyTree(this._tree);
+	}
 }
 
 const func_char = "@";
@@ -48,6 +52,21 @@ function parseString(code: string): Application {
 	}
 	return applicationFrame;
 }
+function stringifyTree(syntax: Application | Definition): string {
+	let str = "";
+	if (syntax instanceof Array) {
+		// Dealing with application
+		for (const term of syntax) {
+			if (typeof term === "string") str += term;
+			else str += stringifyTree(term as Definition);
+		}
+	} else {
+		// Dealing with function
+		const body = stringifyTree(syntax.body);
+		str = `(${func_char}${syntax.param}.${body})`;
+	}
+	return str;
+}
 
 function findBracketPair(str: string, at: number): number {
 	let count = 1;
@@ -66,6 +85,6 @@ const NOT = "@f.@x.@y.fyx";
 const OR = "@f.@g.@x.@y.fxgxy";
 const AND = "@f.@g.@x.@y.fgxyy";
 
-// const program = new Program(`${IF}${TRUE}xy`);
-// console.log(JSON.stringify(convertStringToTree(`(${IF})(${TRUE})xy`), null, 2));
-console.log(JSON.stringify(parseString(`(${IF})(${TRUE})xy`), null, 2));
+const program = new Program(`(${IF})(${TRUE})xy`);
+program.betaReduce();
+console.log(program.toString());
