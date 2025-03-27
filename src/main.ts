@@ -10,8 +10,32 @@ class Program {
 		this._tree = parseString(code);
 	}
 
-	betaReduce() {
-		// TODO: Implement beta reduction
+	betaReduce(syntax: Application | Definition = this._tree) {
+		// TODO: Finish implementation of beta-reduction
+		if (syntax instanceof Array) {
+			// Dealing with application
+			let func: Definition | null = null;
+			for (let i = 0; i < syntax.length; i++) {
+				const term = syntax[i];
+
+				if (!func) {
+					// Find first occurence of a function
+					if (typeof term !== "string") func = term;
+				} else {
+					// Substitute all instances of param with current term
+					this.alphaConversion(func.body, func.param);
+					syntax.splice(i - 1, i, ...func.body);
+				}
+			}
+		} else {
+			// Dealing with function
+			this.betaReduce(syntax.body);
+		}
+	}
+
+	// TODO: Finish implementation of alpha-conversion
+	alphaConversion(syntax: Application, term: Definition | string): Application {
+		return syntax;
 	}
 
 	toString() {
