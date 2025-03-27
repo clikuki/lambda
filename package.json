@@ -1,0 +1,13 @@
+{
+	"name": "lambda",
+	"private": true,
+	"version": "0.0.1",
+	"scripts": {
+		"build": "tsc",
+		"watch": "tsc -w"
+	},
+	"license": "ISC",
+	"dependencies": {
+		"typescript": "^4.7.4"
+	}
+}
