@@ -18,27 +18,23 @@ class Program {
 }
 
 function parseString(code: string): Application {
-	// @x.@y.x
-	// @f.(@g.(@x.(@y.(fxgxy))))
-
-	console.log(code);
-
 	const applicationFrame: Application = [];
 	for (let i = 0; i < code.length; i++) {
 		const char = code[i];
 		if (char === func_char) {
-			// Delimit function body
-			const isBracketed = code[i + 3] === "(";
-			const start = i + (isBracketed ? 4 : 3);
-			const end = isBracketed ? findBracketPair(code, i + 3) : code.length;
+			// Function declaration
+			const start = i + 3;
+			const end = code.length;
 
 			applicationFrame.push({
 				param: code[i + 1],
 				body: parseString(code.slice(start, end)),
 			});
 
-			i = end;
+			// All characters at this point have been consumed
+			break;
 		} else if (char === "(") {
+			// Perform parse within bracket group, this usually occurs before function declarations
 			const start = i + 1;
 			const end = findBracketPair(code, i);
 
@@ -47,6 +43,7 @@ function parseString(code: string): Application {
 
 			i = end;
 		} else {
+			// Add single character as variable
 			applicationFrame.push(char);
 		}
 	}
@@ -72,4 +69,4 @@ const AND = "@f.@g.@x.@y.fgxyy";
 
 // const program = new Program(`${IF}${TRUE}xy`);
 // console.log(JSON.stringify(convertStringToTree(`(${IF})(${TRUE})xy`), null, 2));
-console.log(JSON.stringify(parseString(`(@x.(fx)g)y`), null, 2));
+console.log(JSON.stringify(parseString(`(${IF})(${TRUE})xy`), null, 2));
