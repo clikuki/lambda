@@ -7,8 +7,25 @@ type Application = [Term, Term];
 
 /*
 
-((@x.x)a)b
-( (@x.x)a )b
+(((@x.x)a)b)
+( ((@x.x)a) b)
+(( a )b)
+
+
+(
+	(
+		(
+			@x.x
+		)
+		a
+	)
+	b
+)
+
+(
+	a
+	b
+)
 
 */
 
@@ -19,20 +36,32 @@ class SyntaxTree {
 	}
 
 	/** Perform one step of beta reduction */
-	betaReduce(tree: Term = this._tree) {
+	betaReduce(tree?: Term) {
+		if (!tree) {
+			// Beta-reductions need to swap out items one level above it, so this just enables that
+			// in situations where the tree is an application and is immediately reducible
+			// ie. [ (@x.x)a -> a ] , all occuring at top-level
+			const reduct = this.betaReduce(this._tree);
+			if (reduct) this._tree = reduct;
+			return;
+		}
+
+		// Quick escape for strings
 		if (typeof tree === "string") return;
 
 		if (tree instanceof Array) {
 			// Dealing with application
-			const term = tree[0];
+			const first = tree[0];
 
-			if (typeof term !== "string") {
-				if (term instanceof Array) {
-					this.betaReduce(term);
+			if (typeof first !== "string") {
+				if (first instanceof Array) {
+					// Reductions only occur inside an application so to update itself on the tree
+					// it needs to communicate a change one level above
+					const reduct = this.betaReduce(first);
+					if (reduct) tree[0] = reduct;
 				} else {
 					// Actual beta-reduction step
-					// (@x.@y.xy)a -> @y.(ay)
-					return this._substitute(term.body, term.param, tree[1]);
+					return this._substitute(first.body, first.param, tree[1]);
 				}
 
 				return;
@@ -41,12 +70,10 @@ class SyntaxTree {
 			this.betaReduce(tree[1]);
 		} else {
 			// Dealing with function
-			const reduct = this.betaReduce(tree.body);
-			if (reduct) tree;
+			this.betaReduce(tree.body);
 		}
 	}
 
-	// TODO: Finish implementation of substitute
 	_substitute(tree: Term, from: string, to: Term): Term {
 		// Quick escape for strings
 		if (tree === from) return to;
@@ -158,7 +185,15 @@ const NOT = "@f.@x.@y.fyx";
 const OR = "@f.@g.@x.@y.fxgxy";
 const AND = "@f.@g.@x.@y.fgxyy";
 
-const syntaxTree = new SyntaxTree(`(${IF})(${TRUE})xy`);
+const syntaxTree = new SyntaxTree(`(${IF})(${TRUE})ab`);
+console.log(syntaxTree.toString());
+syntaxTree.betaReduce();
+console.log(syntaxTree.toString());
+syntaxTree.betaReduce();
+console.log(syntaxTree.toString());
+syntaxTree.betaReduce();
+console.log(syntaxTree.toString());
+syntaxTree.betaReduce();
 console.log(syntaxTree.toString());
 syntaxTree.betaReduce();
 console.log(syntaxTree.toString());
