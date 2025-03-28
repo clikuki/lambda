@@ -5,6 +5,7 @@ interface Abstraction {
 type Term = Application | Abstraction | string;
 type Application = [Term, Term];
 
+const alphabet = "abcdefghijklmopqrstuvwxyz";
 class SyntaxTree {
 	_tree: Term;
 	constructor(code: string) {
@@ -75,7 +76,56 @@ class SyntaxTree {
 		return sub;
 	}
 
-	alphaConvert(tree: Term) {}
+	_updateMappingAndAvoids(
+		name: string,
+		mapping: Map<string, string>,
+		avoid: Set<string>
+	): void {
+		for (const char of alphabet) {
+			if (avoid.has(char)) continue;
+			avoid.add(char);
+			mapping.set(name, char);
+			return;
+		}
+	}
+
+	alphaConvert(avoid: Set<string>) {
+		const converted = this._alphaConvert(this._tree, avoid);
+		if (converted) this._tree = converted;
+	}
+	_alphaConvert(
+		tree: Term,
+		avoid: Set<string>,
+		mapping = new Map<string, string>()
+	): Term | null {
+		if (typeof tree === "string") {
+			if (avoid.has(tree)) {
+				if (!mapping.has(tree)) {
+					this._updateMappingAndAvoids(tree, mapping, avoid);
+				}
+				return mapping.get(tree)!;
+			}
+			return null;
+		}
+
+		if (Array.isArray(tree)) {
+			// Dealing with application
+			const [a, b] = tree;
+			return [
+				this._alphaConvert(a, avoid, mapping) ?? a,
+				this._alphaConvert(b, avoid, mapping) ?? b,
+			];
+		} else {
+			// Dealing with abstraction
+			if (avoid.has(tree.param) && !mapping.has(tree.param)) {
+				this._updateMappingAndAvoids(tree.param, mapping, avoid);
+			}
+			return {
+				param: mapping.get(tree.param) ?? tree.param,
+				body: this._alphaConvert(tree.body, avoid, mapping) ?? tree.body,
+			};
+		}
+	}
 
 	toString() {
 		return stringifyTree(this._tree);
@@ -176,5 +226,5 @@ const AND = "@f.@g.@x.@y.f(gxy)y";
 
 const syntaxTree = new SyntaxTree(code`${IF}(${AND}${FALSE}${TRUE})ab`);
 console.log(syntaxTree.toString());
-syntaxTree.betaReduce(true);
+syntaxTree.alphaConvert(new Set(["x"]));
 console.log(syntaxTree.toString());
