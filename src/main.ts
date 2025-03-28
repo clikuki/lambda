@@ -11,48 +11,48 @@ class SyntaxTree {
 		this._tree = parseString(code);
 	}
 
-	/** Perform one step of beta reduction */
-	betaReduce(tree?: Term) {
-		if (!tree) {
-			// Beta-reductions need to swap out items one level above it, so this just enables that
-			// in situations where the tree is an application and is immediately reducible
-			// ie. [ (@x.x)a -> a ] , all occuring at top-level
-			const reduct = this.betaReduce(this._tree);
-			if (reduct) this._tree = reduct;
-			return;
-		}
+	betaReduce(attemptNominal = false) {
+		let reduced: Term | null;
+		do {
+			reduced = this._betaReduce(this._tree);
+			if (reduced) this._tree = reduced;
+		} while (attemptNominal && reduced);
+	}
 
-		// Quick escape for strings
-		if (typeof tree === "string") return;
+	/** Perform one step of beta reduction */
+	_betaReduce(tree: Term): Term | null {
+		// No reduction for strings
+		if (typeof tree === "string") return null;
 
 		if (Array.isArray(tree)) {
-			// Dealing with application
-			const first = tree[0];
+			// Reduce application
+			const [fn, arg] = tree;
 
-			if (typeof first !== "string") {
-				if (Array.isArray(first)) {
-					// Reductions only occur inside an application so to update itself on the tree
-					// it needs to communicate a change one level above
-					const reduct = this.betaReduce(first);
-					if (reduct) tree[0] = reduct;
-				} else {
-					// Actual beta-reduction step
-					return this._substitute(first.body, first.param, tree[1]);
-				}
+			if (typeof fn !== "string") {
+				const fnReduct = this._betaReduce(fn);
+				if (fnReduct) return [fnReduct, arg];
 
-				return;
+				if (!Array.isArray(fn)) return this._substitute(fn.body, fn.param, arg);
 			}
 
-			this.betaReduce(tree[1]);
+			const argReduct = this._betaReduce(arg);
+			if (argReduct) return [fn, argReduct];
 		} else {
-			// Dealing with function
-			this.betaReduce(tree.body);
+			// Reduce abstraction body
+			const fnBodyReduct = this._betaReduce(tree.body);
+			if (fnBodyReduct)
+				return {
+					param: tree.param,
+					body: fnBodyReduct,
+				};
 		}
+
+		return null;
 	}
 
 	_substitute(tree: Term, from: string, to: Term): Term {
 		// Quick escape for strings
-		if (tree === from) return to;
+		if (tree === from) return structuredClone(to);
 		if (typeof tree === "string") return tree;
 
 		let sub: Term;
@@ -62,18 +62,20 @@ class SyntaxTree {
 
 			sub = [this._substitute(a, from, to), this._substitute(b, from, to)];
 		} else if (tree.param !== from) {
-			// Dealing with function
+			// Dealing with abstraction
 			sub = {
 				param: tree.param,
 				body: this._substitute(tree.body, from, to),
 			};
 		} else {
-			// Is function, but shadows the term that we are trying to substitute
+			// Is abstraction, but shadows the term that we are trying to substitute
 			sub = tree;
 		}
 
 		return sub;
 	}
+
+	alphaConvert(tree: Term) {}
 
 	toString() {
 		return stringifyTree(this._tree);
@@ -82,18 +84,17 @@ class SyntaxTree {
 
 const func_char = "@";
 function parseString(code: string): Term {
-	code = code.replaceAll(" ", "");
-
 	let a: Term | null = null;
 	let b: Term | null = null;
 	for (let i = 0; i < code.length; i++) {
 		const char = code[i];
+		if (char === " ") throw SyntaxError("No spaces allowed in code string");
 		if (char === func_char) {
-			// Function declaration
+			// abstraction declaration
 			const start = i + 3;
 			const end = code.length;
 
-			// All characters at this point will be consumed
+			// All characters at this point must be consumed
 			const abstraction = {
 				param: code[i + 1],
 				body: parseString(code.slice(start, end)),
@@ -104,7 +105,7 @@ function parseString(code: string): Term {
 
 			i = end;
 		} else if (char === "(") {
-			// Perform parse within bracket group, this usually occurs before function declarations
+			// Perform parse within bracket group, this usually occurs before abstraction declarations
 			const start = i + 1;
 			const end = findBracketPair(code, i);
 
@@ -139,7 +140,7 @@ function stringifyTree(tree: Term): string {
 			else str += stringifyTree(term);
 		}
 	} else {
-		// Dealing with function
+		// Dealing with abstraction
 		const body = stringifyTree(tree.body);
 		str = `(${func_char}${tree.param}.${body})`;
 	}
@@ -156,22 +157,24 @@ function findBracketPair(str: string, at: number): number {
 	return -1;
 }
 
+function code(strings: TemplateStringsArray, ...values: string[]): string {
+	let str = "";
+	for (let i = 0; i < values.length; i++) {
+		str += strings[i];
+		str += `(${values[i]})`;
+	}
+	str += strings.at(-1);
+	return str.replaceAll(" ", "");
+}
+
 const TRUE = "@x.@y.x";
 const FALSE = "@x.@y.y";
 const IF = "@f.@x.@y.fxy";
 const NOT = "@f.@x.@y.fyx";
-const OR = "@f.@g.@x.@y.fxgxy";
-const AND = "@f.@g.@x.@y.fgxyy";
+const OR = "@f.@g.@x.@y.fx(gxy)";
+const AND = "@f.@g.@x.@y.f(gxy)y";
 
-const syntaxTree = new SyntaxTree(`(@x.x)y`);
+const syntaxTree = new SyntaxTree(code`${IF}(${AND}${FALSE}${TRUE})ab`);
 console.log(syntaxTree.toString());
-syntaxTree.betaReduce();
+syntaxTree.betaReduce(true);
 console.log(syntaxTree.toString());
-// syntaxTree.betaReduce();
-// console.log(syntaxTree.toString());
-// syntaxTree.betaReduce();
-// console.log(syntaxTree.toString());
-// syntaxTree.betaReduce();
-// console.log(syntaxTree.toString());
-// syntaxTree.betaReduce();
-// console.log(syntaxTree.toString());
