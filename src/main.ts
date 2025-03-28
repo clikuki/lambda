@@ -5,30 +5,6 @@ interface Abstraction {
 type Term = Application | Abstraction | string;
 type Application = [Term, Term];
 
-/*
-
-(((@x.x)a)b)
-( ((@x.x)a) b)
-(( a )b)
-
-
-(
-	(
-		(
-			@x.x
-		)
-		a
-	)
-	b
-)
-
-(
-	a
-	b
-)
-
-*/
-
 class SyntaxTree {
 	_tree: Term;
 	constructor(code: string) {
@@ -49,12 +25,12 @@ class SyntaxTree {
 		// Quick escape for strings
 		if (typeof tree === "string") return;
 
-		if (tree instanceof Array) {
+		if (Array.isArray(tree)) {
 			// Dealing with application
 			const first = tree[0];
 
 			if (typeof first !== "string") {
-				if (first instanceof Array) {
+				if (Array.isArray(first)) {
 					// Reductions only occur inside an application so to update itself on the tree
 					// it needs to communicate a change one level above
 					const reduct = this.betaReduce(first);
@@ -80,7 +56,7 @@ class SyntaxTree {
 		if (typeof tree === "string") return tree;
 
 		let sub: Term;
-		if (tree instanceof Array) {
+		if (Array.isArray(tree)) {
 			// Dealing with application
 			const [a, b] = tree;
 
@@ -106,6 +82,8 @@ class SyntaxTree {
 
 const func_char = "@";
 function parseString(code: string): Term {
+	code = code.replaceAll(" ", "");
+
 	let a: Term | null = null;
 	let b: Term | null = null;
 	for (let i = 0; i < code.length; i++) {
@@ -154,11 +132,11 @@ function parseString(code: string): Term {
 function stringifyTree(tree: Term): string {
 	let str = "";
 	if (typeof tree === "string") str = tree;
-	else if (tree instanceof Array) {
+	else if (Array.isArray(tree)) {
 		// Dealing with application
 		for (const term of tree) {
 			if (typeof term === "string") str += term;
-			else str += stringifyTree(term as Abstraction);
+			else str += stringifyTree(term);
 		}
 	} else {
 		// Dealing with function
@@ -185,15 +163,15 @@ const NOT = "@f.@x.@y.fyx";
 const OR = "@f.@g.@x.@y.fxgxy";
 const AND = "@f.@g.@x.@y.fgxyy";
 
-const syntaxTree = new SyntaxTree(`(${IF})(${TRUE})ab`);
+const syntaxTree = new SyntaxTree(`(@x.x)y`);
 console.log(syntaxTree.toString());
 syntaxTree.betaReduce();
 console.log(syntaxTree.toString());
-syntaxTree.betaReduce();
-console.log(syntaxTree.toString());
-syntaxTree.betaReduce();
-console.log(syntaxTree.toString());
-syntaxTree.betaReduce();
-console.log(syntaxTree.toString());
-syntaxTree.betaReduce();
-console.log(syntaxTree.toString());
+// syntaxTree.betaReduce();
+// console.log(syntaxTree.toString());
+// syntaxTree.betaReduce();
+// console.log(syntaxTree.toString());
+// syntaxTree.betaReduce();
+// console.log(syntaxTree.toString());
+// syntaxTree.betaReduce();
+// console.log(syntaxTree.toString());
