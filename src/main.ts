@@ -5,38 +5,71 @@ interface Abstraction {
 type Term = Application | Abstraction | string;
 type Application = [Term, Term];
 
-class Program {
+/*
+
+((@x.x)a)b
+( (@x.x)a )b
+
+*/
+
+class SyntaxTree {
 	_tree: Term;
 	constructor(code: string) {
 		this._tree = parseString(code);
 	}
 
-	betaReduce(syntax: Term = this._tree) {
-		// TODO: Finish implementation of beta-reduction
-		if (syntax instanceof Array) {
-			// Dealing with application
-			let func: Abstraction | null = null;
-			for (let i = 0; i < syntax.length; i++) {
-				const term = syntax[i];
+	/** Perform one step of beta reduction */
+	betaReduce(tree: Term = this._tree) {
+		if (typeof tree === "string") return;
 
-				if (!func) {
-					// Find first occurence of a function
-					if (typeof term !== "string") func = term;
+		if (tree instanceof Array) {
+			// Dealing with application
+			const term = tree[0];
+
+			if (typeof term !== "string") {
+				if (term instanceof Array) {
+					this.betaReduce(term);
 				} else {
-					// Substitute all instances of param with current term
-					this.alphaConversion(func.body, func.param);
-					syntax.splice(i - 1, i, ...func.body);
+					// Actual beta-reduction step
+					// (@x.@y.xy)a -> @y.(ay)
+					return this._substitute(term.body, term.param, tree[1]);
 				}
+
+				return;
 			}
+
+			this.betaReduce(tree[1]);
 		} else {
 			// Dealing with function
-			this.betaReduce(syntax.body);
+			const reduct = this.betaReduce(tree.body);
+			if (reduct) tree;
 		}
 	}
 
-	// TODO: Finish implementation of alpha-conversion
-	alphaConversion(syntax: Application, term: Abstraction | string): Application {
-		return syntax;
+	// TODO: Finish implementation of substitute
+	_substitute(tree: Term, from: string, to: Term): Term {
+		// Quick escape for strings
+		if (tree === from) return to;
+		if (typeof tree === "string") return tree;
+
+		let sub: Term;
+		if (tree instanceof Array) {
+			// Dealing with application
+			const [a, b] = tree;
+
+			sub = [this._substitute(a, from, to), this._substitute(b, from, to)];
+		} else if (tree.param !== from) {
+			// Dealing with function
+			sub = {
+				param: tree.param,
+				body: this._substitute(tree.body, from, to),
+			};
+		} else {
+			// Is function, but shadows the term that we are trying to substitute
+			sub = tree;
+		}
+
+		return sub;
 	}
 
 	toString() {
@@ -91,19 +124,19 @@ function parseString(code: string): Term {
 	if (!a) throw "Cannot parse empty string";
 	return a;
 }
-function stringifyTree(syntax: Term): string {
+function stringifyTree(tree: Term): string {
 	let str = "";
-	if (typeof syntax === "string") str = syntax;
-	else if (syntax instanceof Array) {
+	if (typeof tree === "string") str = tree;
+	else if (tree instanceof Array) {
 		// Dealing with application
-		for (const term of syntax) {
+		for (const term of tree) {
 			if (typeof term === "string") str += term;
 			else str += stringifyTree(term as Abstraction);
 		}
 	} else {
 		// Dealing with function
-		const body = stringifyTree(syntax.body);
-		str = `(${func_char}${syntax.param}.${body})`;
+		const body = stringifyTree(tree.body);
+		str = `(${func_char}${tree.param}.${body})`;
 	}
 	return str;
 }
@@ -125,6 +158,7 @@ const NOT = "@f.@x.@y.fyx";
 const OR = "@f.@g.@x.@y.fxgxy";
 const AND = "@f.@g.@x.@y.fgxyy";
 
-const program = new Program(`(${IF})(${TRUE})xy`);
-// program.betaReduce();
-console.log(program.toString());
+const syntaxTree = new SyntaxTree(`(${IF})(${TRUE})xy`);
+console.log(syntaxTree.toString());
+syntaxTree.betaReduce();
+console.log(syntaxTree.toString());
