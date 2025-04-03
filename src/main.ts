@@ -158,10 +158,13 @@ function stringifyTree(tree: Term): string {
 		str = tree.description!;
 	} else if (Array.isArray(tree)) {
 		// Dealing with application
-		for (const term of tree) {
-			if (typeof term === "symbol") str += term.description;
-			else str += stringifyTree(term);
-		}
+		const [a, b] = tree;
+
+		str += stringifyTree(a);
+
+		// If the second term is an application itself, then explicitly parenthesize
+		if (Array.isArray(b)) str += `(${stringifyTree(b)})`;
+		else str += `${stringifyTree(b)}`;
 	} else {
 		// Dealing with abstraction
 		const body = stringifyTree(tree.body);
@@ -196,7 +199,7 @@ const NOT = code`@f.f${FALSE}${TRUE}`;
 const OR = "@f.@g.@x.@y.fx(gxy)";
 const AND = "@f.@g.@x.@y.f(gxy)y";
 
-const syntaxTree = new SyntaxTree(code`@f.${NOT}(${AND}f${TRUE})`);
+const syntaxTree = new SyntaxTree(code`${AND}`);
 console.log(syntaxTree.toString());
 syntaxTree.betaReduce(true);
 console.log(syntaxTree.toString());
