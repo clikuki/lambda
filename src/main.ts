@@ -1,11 +1,10 @@
 interface Abstraction {
-	param: string;
+	param: symbol;
 	body: Term;
 }
-type Term = Application | Abstraction | string;
+type Term = Application | Abstraction | symbol;
 type Application = [Term, Term];
 
-const alphabet = "abcdefghijklmopqrstuvwxyz";
 class SyntaxTree {
 	_tree: Term;
 	constructor(code: string) {
@@ -23,17 +22,19 @@ class SyntaxTree {
 	/** Perform one step of beta reduction */
 	_betaReduce(tree: Term): Term | null {
 		// No reduction for strings
-		if (typeof tree === "string") return null;
+		if (typeof tree === "symbol") return null;
 
 		if (Array.isArray(tree)) {
 			// Reduce application
 			const [fn, arg] = tree;
 
-			if (typeof fn !== "string") {
+			if (typeof tree !== "symbol") {
 				const fnReduct = this._betaReduce(fn);
 				if (fnReduct) return [fnReduct, arg];
 
-				if (!Array.isArray(fn)) return this._substitute(fn.body, fn.param, arg);
+				if (!Array.isArray(fn) && typeof fn !== "symbol") {
+					return this._substitute(fn.body, fn.param, arg);
+				}
 			}
 
 			const argReduct = this._betaReduce(arg);
@@ -51,10 +52,10 @@ class SyntaxTree {
 		return null;
 	}
 
-	_substitute(tree: Term, from: string, to: Term): Term {
+	_substitute(tree: Term, from: symbol, to: Term): Term {
 		// Quick escape for strings
-		if (tree === from) return structuredClone(to);
-		if (typeof tree === "string") return tree;
+		if (tree === from) return this._copy(to);
+		if (typeof tree === "symbol") return tree;
 
 		let sub: Term;
 		if (Array.isArray(tree)) {
@@ -76,55 +77,15 @@ class SyntaxTree {
 		return sub;
 	}
 
-	_updateMappingAndAvoids(
-		name: string,
-		mapping: Map<string, string>,
-		avoid: Set<string>
-	): void {
-		for (const char of alphabet) {
-			if (avoid.has(char)) continue;
-			avoid.add(char);
-			mapping.set(name, char);
-			return;
-		}
-	}
-
-	alphaConvert(avoid: Set<string>) {
-		const converted = this._alphaConvert(this._tree, avoid);
-		if (converted) this._tree = converted;
-	}
-	_alphaConvert(
-		tree: Term,
-		avoid: Set<string>,
-		mapping = new Map<string, string>()
-	): Term | null {
-		if (typeof tree === "string") {
-			if (avoid.has(tree)) {
-				if (!mapping.has(tree)) {
-					this._updateMappingAndAvoids(tree, mapping, avoid);
-				}
-				return mapping.get(tree)!;
-			}
-			return null;
-		}
-
-		if (Array.isArray(tree)) {
-			// Dealing with application
-			const [a, b] = tree;
-			return [
-				this._alphaConvert(a, avoid, mapping) ?? a,
-				this._alphaConvert(b, avoid, mapping) ?? b,
-			];
-		} else {
-			// Dealing with abstraction
-			if (avoid.has(tree.param) && !mapping.has(tree.param)) {
-				this._updateMappingAndAvoids(tree.param, mapping, avoid);
-			}
+	_copy(tree: Term): Term {
+		if (typeof tree === "symbol") return tree;
+		else if (Array.isArray(tree))
+			return [this._copy(tree[0]), this._copy(tree[1])];
+		else
 			return {
-				param: mapping.get(tree.param) ?? tree.param,
-				body: this._alphaConvert(tree.body, avoid, mapping) ?? tree.body,
+				param: tree.param,
+				body: this._copy(tree.body),
 			};
-		}
 	}
 
 	toString() {
@@ -133,7 +94,7 @@ class SyntaxTree {
 }
 
 const func_char = "@";
-function parseString(code: string): Term {
+function parseString(code: string, mapping = new Map<string, symbol>()): Term {
 	let a: Term | null = null;
 	let b: Term | null = null;
 	for (let i = 0; i < code.length; i++) {
@@ -144,11 +105,17 @@ function parseString(code: string): Term {
 			const start = i + 3;
 			const end = code.length;
 
+			const paramChar = code[i + 1];
+			const param = Symbol(paramChar);
+			const localMapping = new Map(mapping);
+			localMapping.set(paramChar, param);
+
 			// All characters at this point must be consumed
-			const abstraction = {
-				param: code[i + 1],
-				body: parseString(code.slice(start, end)),
-			} satisfies Abstraction;
+			const body = parseString(code.slice(start, end), localMapping);
+			const abstraction: Abstraction = {
+				param,
+				body,
+			};
 
 			if (!a) a = abstraction;
 			else b = abstraction;
@@ -159,15 +126,19 @@ function parseString(code: string): Term {
 			const start = i + 1;
 			const end = findBracketPair(code, i);
 
-			let term = parseString(code.slice(start, end));
+			let term = parseString(code.slice(start, end), mapping);
 			if (!a) a = term;
 			else b = term;
 
 			i = end;
 		} else {
+			// Get correspnding symbol of variable
+			const sym = mapping.get(char) ?? Symbol(char);
+			if (!mapping.has(char)) mapping.set(char, sym);
+
 			// Add single character as variable
-			if (!a) a = char;
-			else b = char;
+			if (!a) a = sym;
+			else b = sym;
 		}
 
 		if (b) {
@@ -182,17 +153,19 @@ function parseString(code: string): Term {
 }
 function stringifyTree(tree: Term): string {
 	let str = "";
-	if (typeof tree === "string") str = tree;
-	else if (Array.isArray(tree)) {
+	if (typeof tree === "symbol") {
+		// Is this a dangerous assumption?
+		str = tree.description!;
+	} else if (Array.isArray(tree)) {
 		// Dealing with application
 		for (const term of tree) {
-			if (typeof term === "string") str += term;
+			if (typeof term === "symbol") str += term.description;
 			else str += stringifyTree(term);
 		}
 	} else {
 		// Dealing with abstraction
 		const body = stringifyTree(tree.body);
-		str = `(${func_char}${tree.param}.${body})`;
+		str = `(${func_char}${tree.param.description}.${body})`;
 	}
 	return str;
 }
@@ -219,12 +192,11 @@ function code(strings: TemplateStringsArray, ...values: string[]): string {
 
 const TRUE = "@x.@y.x";
 const FALSE = "@x.@y.y";
-const IF = "@f.@x.@y.fxy";
-const NOT = "@f.@x.@y.fyx";
+const NOT = code`@f.f${FALSE}${TRUE}`;
 const OR = "@f.@g.@x.@y.fx(gxy)";
 const AND = "@f.@g.@x.@y.f(gxy)y";
 
-const syntaxTree = new SyntaxTree(code`${IF}(${AND}${FALSE}${TRUE})ab`);
+const syntaxTree = new SyntaxTree(code`@f.${NOT}(${AND}f${TRUE})`);
 console.log(syntaxTree.toString());
-syntaxTree.alphaConvert(new Set(["x"]));
+syntaxTree.betaReduce(true);
 console.log(syntaxTree.toString());
