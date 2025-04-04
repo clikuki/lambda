@@ -5,6 +5,7 @@ export interface Abstraction {
 export type Term = Application | Abstraction | symbol;
 export type Application = [Term, Term];
 
+const REDUCTION_STEP_LIMIT = 10000;
 export class SyntaxTree {
 	_tree: Term;
 	constructor(code: string) {
@@ -13,14 +14,17 @@ export class SyntaxTree {
 
 	betaReduce(attemptNominal = false) {
 		let reduced: Term | null;
+		let steps = REDUCTION_STEP_LIMIT;
 		do {
-			reduced = this._betaReduce(this._tree);
+			reduced = attemptNominal
+				? this._greedyReductionStep(this._tree)
+				: this._shallowReductionStep(this._tree);
 			if (reduced) this._tree = reduced;
-		} while (attemptNominal && reduced);
+		} while (attemptNominal && reduced && --steps > 0);
 	}
 
-	/** Perform one step of beta reduction */
-	_betaReduce(tree: Term): Term | null {
+	/** Performs as much reduction as possible in a single step */
+	_greedyReductionStep(tree: Term): Term | null {
 		// No reduction for strings
 		if (typeof tree === "symbol") return null;
 
@@ -28,20 +32,48 @@ export class SyntaxTree {
 			// Reduce application
 			const [fn, arg] = tree;
 
-			if (typeof tree !== "symbol") {
-				const fnReduct = this._betaReduce(fn);
-				if (fnReduct) return [fnReduct, arg];
+			const fnReduct = this._greedyReductionStep(fn) ?? fn;
+			const argReduct = this._greedyReductionStep(arg) ?? arg;
+			if (!Array.isArray(fn) && typeof fn !== "symbol") {
+				return this._substitute(fn.body, fn.param, arg);
+			} else {
+				return [fnReduct, argReduct];
+			}
+		} else {
+			// Reduce abstraction body
+			const fnBodyReduct = this._greedyReductionStep(tree.body);
+			if (fnBodyReduct) {
+				return {
+					param: tree.param,
+					body: fnBodyReduct,
+				};
+			}
+		}
 
-				if (!Array.isArray(fn) && typeof fn !== "symbol") {
-					return this._substitute(fn.body, fn.param, arg);
-				}
+		return null;
+	}
+
+	/** Perform one step of beta reduction */
+	_shallowReductionStep(tree: Term): Term | null {
+		// No reduction for strings
+		if (typeof tree === "symbol") return null;
+
+		if (Array.isArray(tree)) {
+			// Reduce application
+			const [fn, arg] = tree;
+
+			if (!Array.isArray(fn) && typeof fn !== "symbol") {
+				return this._substitute(fn.body, fn.param, arg);
 			}
 
-			const argReduct = this._betaReduce(arg);
+			const fnReduct = this._shallowReductionStep(fn);
+			if (fnReduct) return [fnReduct, arg];
+
+			const argReduct = this._shallowReductionStep(arg);
 			if (argReduct) return [fn, argReduct];
 		} else {
 			// Reduce abstraction body
-			const fnBodyReduct = this._betaReduce(tree.body);
+			const fnBodyReduct = this._shallowReductionStep(tree.body);
 			if (fnBodyReduct)
 				return {
 					param: tree.param,
