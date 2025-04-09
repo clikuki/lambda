@@ -1,9 +1,22 @@
 export interface Abstraction {
-	param: symbol;
+	param: Variable;
 	body: Term;
 }
-export type Term = Application | Abstraction | symbol;
+export type Variable = symbol;
 export type Application = [Term, Term];
+export type Term = Application | Abstraction | Variable;
+
+export function isVariable(tree: Term): tree is Variable {
+	return typeof tree === "symbol";
+}
+
+export function isApplication(tree: Term): tree is Application {
+	return Array.isArray(tree);
+}
+
+export function isAbstraction(tree: Term): tree is Abstraction {
+	return !isVariable(tree) && !isApplication(tree);
+}
 
 const REDUCTION_STEP_LIMIT = 10000;
 export class SyntaxTree {
@@ -26,15 +39,15 @@ export class SyntaxTree {
 	/** Performs as much reduction as possible in a single step */
 	_greedyReductionStep(tree: Term): Term | null {
 		// No reduction for strings
-		if (typeof tree === "symbol") return null;
+		if (isVariable(tree)) return null;
 
-		if (Array.isArray(tree)) {
+		if (isApplication(tree)) {
 			// Reduce application
 			const [fn, arg] = tree;
 
 			const fnReduct = this._greedyReductionStep(fn) ?? fn;
 			const argReduct = this._greedyReductionStep(arg) ?? arg;
-			if (!Array.isArray(fn) && typeof fn !== "symbol") {
+			if (!isApplication(fn) && !isVariable(fn)) {
 				return this._substitute(fn.body, fn.param, arg);
 			} else {
 				return [fnReduct, argReduct];
@@ -56,13 +69,13 @@ export class SyntaxTree {
 	/** Perform one step of beta reduction */
 	_shallowReductionStep(tree: Term): Term | null {
 		// No reduction for strings
-		if (typeof tree === "symbol") return null;
+		if (isVariable(tree)) return null;
 
-		if (Array.isArray(tree)) {
+		if (isApplication(tree)) {
 			// Reduce application
 			const [fn, arg] = tree;
 
-			if (!Array.isArray(fn) && typeof fn !== "symbol") {
+			if (!isApplication(fn) && !isVariable(fn)) {
 				return this._substitute(fn.body, fn.param, arg);
 			}
 
@@ -84,13 +97,13 @@ export class SyntaxTree {
 		return null;
 	}
 
-	_substitute(tree: Term, from: symbol, to: Term): Term {
+	_substitute(tree: Term, from: Variable, to: Term): Term {
 		// Quick escape for strings
 		if (tree === from) return this._copy(to);
-		if (typeof tree === "symbol") return tree;
+		if (isVariable(tree)) return tree;
 
 		let sub: Term;
-		if (Array.isArray(tree)) {
+		if (isApplication(tree)) {
 			// Dealing with application
 			const [a, b] = tree;
 
@@ -110,8 +123,8 @@ export class SyntaxTree {
 	}
 
 	_copy(tree: Term): Term {
-		if (typeof tree === "symbol") return tree;
-		else if (Array.isArray(tree))
+		if (isVariable(tree)) return tree;
+		else if (isApplication(tree))
 			return [this._copy(tree[0]), this._copy(tree[1])];
 		else
 			return {
@@ -128,7 +141,7 @@ export class SyntaxTree {
 export const func_char = "@";
 export function parseString(
 	code: string,
-	mapping = new Map<string, symbol>()
+	mapping = new Map<string, Variable>()
 ): Term {
 	let a: Term | null = null;
 	let b: Term | null = null;
@@ -188,17 +201,17 @@ export function parseString(
 }
 export function stringifyTree(tree: Term): string {
 	let str = "";
-	if (typeof tree === "symbol") {
+	if (isVariable(tree)) {
 		// Is this a dangerous assumption?
 		str = tree.description!;
-	} else if (Array.isArray(tree)) {
+	} else if (isApplication(tree)) {
 		// Dealing with application
 		const [a, b] = tree;
 
 		str += stringifyTree(a);
 
 		// If the second term is an application itself, then explicitly parenthesize
-		if (Array.isArray(b)) str += `(${stringifyTree(b)})`;
+		if (isApplication(b)) str += `(${stringifyTree(b)})`;
 		else str += `${stringifyTree(b)}`;
 	} else {
 		// Dealing with abstraction
