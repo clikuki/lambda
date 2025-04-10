@@ -1,4 +1,5 @@
 import { SyntaxTree, code } from "./lambda.js";
+import { constructDiagram } from "./tromp.js";
 
 const TRUE = "@x.@y.x";
 const FALSE = "@x.@y.y";
@@ -13,3 +14,7 @@ const syntaxTree = new SyntaxTree(
 console.log(syntaxTree.toString());
 syntaxTree.betaReduce(true);
 console.log(syntaxTree.toString());
+
+const svg = constructDiagram(syntaxTree);
+svg.style.width = "500px";
+document.body.appendChild(svg);
