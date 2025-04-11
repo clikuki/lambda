@@ -2,15 +2,18 @@ export interface Abstraction {
 	type: "ABSTRACTION";
 	param: symbol;
 	body: Term;
+	id: symbol;
 }
 export interface Application {
 	type: "APPLICATION";
 	left: Term;
 	right: Term;
+	id: symbol;
 }
 export interface Variable {
 	type: "VARIABLE";
 	symbol: symbol;
+	id: symbol;
 }
 export type Term = Application | Abstraction | Variable;
 
@@ -45,6 +48,7 @@ export class SyntaxTree {
 					return this._substitute(left.body, left.param, right);
 				} else {
 					return {
+						id: tree.id,
 						type: "APPLICATION",
 						left: leftReduct,
 						right: rightReduct,
@@ -56,6 +60,7 @@ export class SyntaxTree {
 				const bodyReduct = this._greedyReductionStep(tree.body);
 				if (bodyReduct) {
 					return {
+						id: tree.id,
 						type: "ABSTRACTION",
 						param: tree.param,
 						body: bodyReduct,
@@ -80,6 +85,7 @@ export class SyntaxTree {
 				const leftReduct = this._shallowReductionStep(left);
 				if (leftReduct) {
 					return {
+						id: tree.id,
 						type: "APPLICATION",
 						left: leftReduct,
 						right,
@@ -89,6 +95,7 @@ export class SyntaxTree {
 				const rightReduct = this._shallowReductionStep(right);
 				if (rightReduct) {
 					return {
+						id: tree.id,
 						type: "APPLICATION",
 						left,
 						right: rightReduct,
@@ -101,6 +108,7 @@ export class SyntaxTree {
 				const bodyReduct = this._greedyReductionStep(tree.body);
 				if (bodyReduct) {
 					return {
+						id: tree.id,
 						type: "ABSTRACTION",
 						param: tree.param,
 						body: bodyReduct,
@@ -124,6 +132,7 @@ export class SyntaxTree {
 			const { left, right } = tree;
 
 			sub = {
+				id: tree.id,
 				type: "APPLICATION",
 				left: this._substitute(left, from, to),
 				right: this._substitute(right, from, to),
@@ -131,6 +140,7 @@ export class SyntaxTree {
 		} else if (tree.param !== from) {
 			// Dealing with abstraction
 			sub = {
+				id: tree.id,
 				type: "ABSTRACTION",
 				param: tree.param,
 				body: this._substitute(tree.body, from, to),
@@ -147,17 +157,20 @@ export class SyntaxTree {
 		switch (tree.type) {
 			case "VARIABLE":
 				return {
+					id: tree.id,
 					type: "VARIABLE",
 					symbol: tree.symbol,
 				};
 			case "APPLICATION":
 				return {
+					id: tree.id,
 					type: "APPLICATION",
 					left: this._copy(tree.left),
 					right: this._copy(tree.right),
 				};
 			case "ABSTRACTION":
 				return {
+					id: tree.id,
 					type: "ABSTRACTION",
 					param: tree.param,
 					body: this._copy(tree.body),
@@ -196,6 +209,7 @@ export function parseString(
 				type: "ABSTRACTION",
 				param,
 				body,
+				id: Symbol(),
 			};
 
 			if (!left) left = abstraction;
@@ -221,6 +235,7 @@ export function parseString(
 			const variable: Term = {
 				type: "VARIABLE",
 				symbol: sym,
+				id: Symbol(),
 			};
 			if (!left) left = variable;
 			else right = variable;
@@ -228,7 +243,7 @@ export function parseString(
 
 		if (right) {
 			// Group a and b into an application
-			left = { type: "APPLICATION", left, right };
+			left = { type: "APPLICATION", left, right, id: Symbol() };
 			right = null;
 		}
 	}

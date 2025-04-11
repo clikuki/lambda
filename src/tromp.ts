@@ -9,6 +9,7 @@ interface DiagramAbstraction {
 	parameters: symbol[];
 	body: DiagramApplication | DiagramVariable;
 	parent?: DiagramTerm;
+	id: symbol;
 
 	x1?: number;
 	x2?: number;
@@ -21,6 +22,7 @@ interface DiagramApplication {
 	left: DiagramTerm;
 	right: DiagramTerm;
 	parent?: DiagramTerm;
+	id: symbol;
 
 	x1?: number;
 	x2?: number;
@@ -30,6 +32,7 @@ interface DiagramVariable {
 	type: "VARIABLE";
 	symbol: symbol;
 	parent?: DiagramTerm;
+	id: symbol;
 
 	x?: number;
 	y1?: number;
@@ -49,7 +52,12 @@ function createSVG(tag: string, attr?: Record<string, any>) {
 }
 
 function rebuildTree(tree: Term): DiagramTerm {
-	if (tree.type === "VARIABLE") return tree;
+	if (tree.type === "VARIABLE")
+		return {
+			type: "VARIABLE",
+			symbol: tree.symbol,
+			id: tree.id,
+		};
 	else if (tree.type === "APPLICATION") {
 		const left = rebuildTree(tree.left);
 		const right = rebuildTree(tree.right);
@@ -57,6 +65,7 @@ function rebuildTree(tree: Term): DiagramTerm {
 			type: "APPLICATION",
 			left,
 			right,
+			id: tree.id,
 		};
 		left.parent = node;
 		right.parent = node;
@@ -74,6 +83,7 @@ function rebuildTree(tree: Term): DiagramTerm {
 			type: "ABSTRACTION",
 			parameters,
 			body: rebuildTree(trueBody) as DiagramVariable,
+			id: tree.id,
 		};
 		node.body.parent = node;
 		return node;
