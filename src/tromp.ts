@@ -1,20 +1,12 @@
-import {
-	isAbstraction,
-	isApplication,
-	isVariable,
-	type Variable,
-	type Abstraction,
-	type Term,
-	SyntaxTree,
-} from "./lambda.js";
+import { SyntaxTree, type Abstraction, type Term } from "./lambda.js";
 
 interface ParameterLine {
-	symbol: Variable;
+	symbol: symbol;
 	y: number;
 }
 interface DiagramAbstraction {
 	type: "ABSTRACTION";
-	parameters: Variable[];
+	parameters: symbol[];
 	body: DiagramApplication | DiagramVariable;
 	parent?: DiagramTerm;
 
@@ -36,7 +28,7 @@ interface DiagramApplication {
 }
 interface DiagramVariable {
 	type: "VARIABLE";
-	symbol: Variable;
+	symbol: symbol;
 	parent?: DiagramTerm;
 
 	x?: number;
@@ -57,14 +49,10 @@ function createSVG(tag: string, attr?: Record<string, any>) {
 }
 
 function rebuildTree(tree: Term): DiagramTerm {
-	if (isVariable(tree))
-		return {
-			type: "VARIABLE",
-			symbol: tree,
-		};
-	else if (isApplication(tree)) {
-		const left = rebuildTree(tree[0]);
-		const right = rebuildTree(tree[1]);
+	if (tree.type === "VARIABLE") return tree;
+	else if (tree.type === "APPLICATION") {
+		const left = rebuildTree(tree.left);
+		const right = rebuildTree(tree.right);
 		const node: DiagramApplication = {
 			type: "APPLICATION",
 			left,
@@ -75,17 +63,17 @@ function rebuildTree(tree: Term): DiagramTerm {
 		return node;
 	} else {
 		// Find all parameters until first non-abstraction is hit
-		const parameters: Variable[] = [];
-		const trueBody = (function findParameters(tree: Abstraction) {
+		const parameters: symbol[] = [];
+		const trueBody = (function findParameters(tree: Abstraction): Term {
 			parameters.push(tree.param);
-			if (isAbstraction(tree.body)) return findParameters(tree.body);
+			if (tree.body.type === "ABSTRACTION") return findParameters(tree.body);
 			else return tree.body;
 		})(tree);
 
 		const node: DiagramAbstraction = {
 			type: "ABSTRACTION",
 			parameters,
-			body: rebuildTree(trueBody) as DiagramApplication | DiagramVariable,
+			body: rebuildTree(trueBody) as DiagramVariable,
 		};
 		node.body.parent = node;
 		return node;
@@ -100,7 +88,7 @@ const style = {
 	pad: 2,
 };
 
-function findRelevantAbstraction(node: DiagramTerm, sym: Variable) {
+function findRelevantAbstraction(node: DiagramTerm, sym: symbol) {
 	let binding: DiagramAbstraction | null = null;
 	let current: DiagramTerm | undefined = node;
 
