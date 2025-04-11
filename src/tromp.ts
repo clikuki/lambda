@@ -101,13 +101,11 @@ const style = {
 };
 
 function findRelevantAbstraction(node: DiagramTerm, sym: Variable) {
-	let first: DiagramAbstraction | null = null;
 	let binding: DiagramAbstraction | null = null;
 	let current: DiagramTerm | undefined = node;
 
 	while (current) {
 		if (current.type === "ABSTRACTION") {
-			if (!first) first = current;
 			if (current.paramLines?.has(sym)) {
 				binding = current;
 				break; // Stop once we find the binding abstraction
@@ -116,7 +114,7 @@ function findRelevantAbstraction(node: DiagramTerm, sym: Variable) {
 		current = current.parent;
 	}
 
-	return { first, binding };
+	return binding;
 }
 
 function findExtremeTerm(
@@ -169,7 +167,7 @@ function computeHeights(t: DiagramTerm, y = style.linewidth / 2) {
 				})
 			);
 
-			computeHeights(t.body, y);
+			computeHeights(t.body, (y -= style.paramLineGap));
 			break;
 
 		case "APPLICATION":
@@ -184,10 +182,10 @@ function computeHeights(t: DiagramTerm, y = style.linewidth / 2) {
 			break;
 
 		case "VARIABLE":
-			const { first, binding } = findRelevantAbstraction(t, t.symbol);
-			t.y1 = binding?.paramLines?.get(t.symbol)?.y ?? -10;
-			t.y2 = first?.paramLines?.get(first?.parameters.at(-1)!)?.y ?? 0;
-			t.y2 += style.applicationRowGap;
+			const binding = findRelevantAbstraction(t, t.symbol);
+			const line = binding?.paramLines?.get(t.symbol);
+			t.y1 = line?.y ?? y + style.applicationRowGap / 2;
+			t.y2 = y + style.applicationRowGap;
 			break;
 	}
 }
