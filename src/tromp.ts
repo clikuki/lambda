@@ -264,22 +264,22 @@ function setUpPositionAndSizes(tree: DiagramTerm) {
 	})(tree);
 
 	// Pass 2: Calculate x values
-	(function widthPass(t: DiagramTerm, x = style.linewidth / 2): DiagramTerm {
+	(function widthPass(t: DiagramTerm, x = 0): DiagramTerm {
 		switch (t.type) {
 			case "ABSTRACTION":
-				t.x1 = x;
+				t.x1 = x + (!x ? 0 : style.pad / 2);
 				x += style.applicationColGap;
 
 				widthPass(t.body, x);
 
 				const variable = findRightMostTerm(t.body);
-				t.x2 = variable.x! + style.applicationColGap;
+				t.x2 = variable.x! - style.pad / 2 + style.applicationColGap;
 				return t;
 			case "APPLICATION":
 				const h1 = widthPass(t.left, x);
 
 				x = findRightMostTerm(h1).x! + style.applicationColGap;
-				if (t.right.type === "ABSTRACTION") x += style.pad;
+				// if (t.right.type === "ABSTRACTION") x += style.pad;
 				const h2 = widthPass(t.right, x);
 
 				const stem = findLeftMostTerm(h1);
