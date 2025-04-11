@@ -253,30 +253,38 @@ function buildPath(tree: DiagramTerm): SVGElement {
 	return elem;
 }
 
-export function constructDiagram(tree: SyntaxTree) {
-	const diagramTree = rebuildTree(tree._tree);
-	computeHeights(diagramTree);
-	computeWidths(diagramTree);
+function getTreeSize(tree: DiagramTerm): [number, number] {
+	const height = findExtremeTerm(tree, "LEFT").y2 ?? 0;
 
 	let width = 0;
-	let current: DiagramTerm | null = diagramTree;
+	let current: DiagramTerm | null = tree;
 	while (current) {
 		switch (current.type) {
 			case "ABSTRACTION":
 				width = current.x2!;
 				current = null;
 				break;
+
 			case "APPLICATION":
 				current = current.right;
 				break;
+
 			case "VARIABLE":
 				width = current.x!;
 				current = null;
+				break;
 		}
 	}
 
-	const height = findExtremeTerm(diagramTree, "LEFT").y2;
+	return [height, width];
+}
 
+export function constructDiagram(tree: SyntaxTree) {
+	const diagramTree = rebuildTree(tree._tree);
+	computeHeights(diagramTree);
+	computeWidths(diagramTree);
+
+	const [height, width] = getTreeSize(diagramTree);
 	const path = buildPath(diagramTree);
 	const svg = createSVG("svg", {
 		viewBox: `0 0 ${width} ${height}`,
