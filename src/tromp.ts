@@ -234,7 +234,7 @@ function setUpPositionAndSizes(tree: DiagramTerm) {
 					})
 				);
 
-				heightPass(t.body);
+				heightPass(t.body, y);
 				return t;
 			case "APPLICATION":
 				const h1 = heightPass(t.left, y);
@@ -326,7 +326,7 @@ function buildPath(tree: DiagramTerm): SVGElement {
 				node.x ??= style.linewidth / 2;
 				node.y1 ??= style.linewidth / 2;
 				node.y2 ??= style.linewidth / 2;
-				console.log(node.x, node.y1, node.y2);
+				// console.log(node.x, node.y1, node.y2);
 				pathStr += `M ${node.x} ${node.y1} L ${node.x} ${node.y2}`;
 				break;
 		}
