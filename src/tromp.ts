@@ -99,21 +99,116 @@ const style = {
 	paramLineGap: 6,
 	applicationRowGap: 10,
 	applicationColGap: 10,
+	pad: 2,
 };
 export function constructDiagram(tree: SyntaxTree) {
 	const AST = rebuildTree(tree._tree);
 	setUpPositionAndSizes(AST);
 
+	let width = 0;
+	let current: DiagramTerm | null = AST;
+	while (current) {
+		switch (current.type) {
+			case "ABSTRACTION":
+				width = current.x2!;
+				current = null;
+				break;
+			case "APPLICATION":
+				current = current.right;
+				break;
+			case "VARIABLE":
+				width = current.x!;
+				current = null;
+		}
+	}
+
+	const height = findLeftMostTerm(AST).y2;
+
 	const path = buildPath(AST);
 	const svg = createSVG("svg", {
-		// FIXME: replace with actual diagram size
-		viewBox: "0 0 50 50",
+		viewBox: `0 0 ${width} ${height}`,
 		stroke: "black",
 		"stroke-width": style.linewidth,
 		"stroke-linecap": "butt",
 	});
 	svg.append(path);
 	return svg;
+}
+
+function findRelevantAbstraction(node: DiagramTerm, sym: Variable) {
+	let first: DiagramAbstraction | null = null;
+	let binding: DiagramAbstraction | null = null;
+	let current: DiagramTerm | undefined = node;
+
+	while (current) {
+		if (current.type === "ABSTRACTION") {
+			if (!first) first = current;
+			if (current.paramLines?.has(sym)) {
+				binding = current;
+				break; // Stop once we find the binding abstraction
+			}
+		}
+		current = current.parent;
+	}
+
+	return { first, binding };
+}
+
+function findLeftMostTerm(term: DiagramTerm) {
+	let variable: DiagramTerm | null = null;
+	let current: DiagramTerm | null = term;
+	while (current) {
+		switch (current.type) {
+			case "ABSTRACTION":
+				current = current.body;
+				break;
+			case "APPLICATION":
+				current = current.left;
+				break;
+			case "VARIABLE":
+				variable = current;
+				current = null;
+				break;
+		}
+	}
+
+	if (!variable) throw SyntaxError("Could not find leftmost variable");
+
+	return variable;
+}
+
+function findRightMostTerm(term: DiagramTerm) {
+	let variable: DiagramTerm | null = null;
+	let current: DiagramTerm | null = term;
+	while (current) {
+		switch (current.type) {
+			case "ABSTRACTION":
+				current = current.body;
+				break;
+			case "APPLICATION":
+				current = current.right;
+				break;
+			case "VARIABLE":
+				variable = current;
+				current = null;
+				break;
+		}
+	}
+
+	if (!variable) throw SyntaxError("Could not find leftmost variable");
+
+	return variable;
+}
+
+function countLeaves(node: DiagramTerm): number {
+	switch (node.type) {
+		case "ABSTRACTION":
+			return countLeaves(node.body);
+		case "APPLICATION":
+			return countLeaves(node.left) + countLeaves(node.right);
+		case "VARIABLE":
+			return 1;
+	}
 }
 
 function setUpPositionAndSizes(tree: DiagramTerm) {
@@ -127,87 +222,10 @@ function setUpPositionAndSizes(tree: DiagramTerm) {
 	// 		break;
 	// }
 
-	function findRelevantAbstraction(node: DiagramTerm, sym: Variable) {
-		let first: DiagramAbstraction | null = null;
-		let binding: DiagramAbstraction | null = null;
-		let current: DiagramTerm | undefined = node;
-
-		while (current) {
-			if (current.type === "ABSTRACTION") {
-				if (!first) first = current;
-				if (current.paramLines?.has(sym)) {
-					binding = current;
-					break; // Stop once we find the binding abstraction
-				}
-			}
-			current = current.parent;
-		}
-
-		return { first, binding };
-	}
-
-	function findLeftMostTerm(term: DiagramTerm) {
-		let variable: DiagramTerm | null = null;
-		let current: DiagramTerm | null = term;
-		while (current) {
-			switch (current.type) {
-				case "ABSTRACTION":
-					current = current.body;
-					break;
-				case "APPLICATION":
-					current = current.left;
-					break;
-				case "VARIABLE":
-					variable = current;
-					current = null;
-					break;
-			}
-		}
-
-		if (!variable) throw SyntaxError("Could not find leftmost variable");
-
-		return variable;
-	}
-
-	function findRightMostTerm(term: DiagramTerm) {
-		let variable: DiagramTerm | null = null;
-		let current: DiagramTerm | null = term;
-		while (current) {
-			switch (current.type) {
-				case "ABSTRACTION":
-					current = current.body;
-					break;
-				case "APPLICATION":
-					current = current.right;
-					break;
-				case "VARIABLE":
-					variable = current;
-					current = null;
-					break;
-			}
-		}
-
-		if (!variable) throw SyntaxError("Could not find leftmost variable");
-
-		return variable;
-	}
-
-	function countLeaves(node: DiagramTerm): number {
-		switch (node.type) {
-			case "ABSTRACTION":
-				return countLeaves(node.body);
-			case "APPLICATION":
-				return countLeaves(node.left) + countLeaves(node.right);
-			case "VARIABLE":
-				return 1;
-		}
-	}
-
 	// Pass 1: Calculate y values
-	(function heightPass(t: DiagramTerm, y = 0): DiagramTerm {
+	(function heightPass(t: DiagramTerm, y = style.linewidth / 2): DiagramTerm {
 		switch (t.type) {
 			case "ABSTRACTION":
-				y += style.linewidth / 2;
 				t.paramLines = new Map(
 					t.parameters.map((p) => {
 						const lineY = y;
@@ -224,6 +242,7 @@ function setUpPositionAndSizes(tree: DiagramTerm) {
 				const stem = findLeftMostTerm(h1);
 				const branch = findLeftMostTerm(h2);
 
+				stem.y2 = branch.y2 = Math.max(stem.y2!, branch.y2!);
 				t.y = branch.y2;
 
 				// console.log(stem, stem.y2, (branch.y2 ?? 0) + style.applicationRowGap);
@@ -245,29 +264,22 @@ function setUpPositionAndSizes(tree: DiagramTerm) {
 	})(tree);
 
 	// Pass 2: Calculate x values
-	(function widthPass(t: DiagramTerm, x = 0): DiagramTerm {
+	(function widthPass(t: DiagramTerm, x = style.linewidth / 2): DiagramTerm {
 		switch (t.type) {
 			case "ABSTRACTION":
 				t.x1 = x;
+				x += style.applicationColGap;
 
-				x += style.linewidth / 2;
-				t.paramLines = new Map(
-					t.parameters.map((p) => {
-						const lineY = x;
-						x += style.paramLineGap;
-						return [p, { symbol: p, y: lineY }];
-					})
-				);
-
-				widthPass(t.body);
+				widthPass(t.body, x);
 
 				const variable = findRightMostTerm(t.body);
 				t.x2 = variable.x! + style.applicationColGap;
 				return t;
 			case "APPLICATION":
-				if (t.parent?.type !== "APPLICATION") x += style.applicationColGap;
 				const h1 = widthPass(t.left, x);
-				x += style.applicationColGap;
+
+				x = findRightMostTerm(h1).x! + style.applicationColGap;
+				if (t.right.type === "ABSTRACTION") x += style.pad;
 				const h2 = widthPass(t.right, x);
 
 				const stem = findLeftMostTerm(h1);
@@ -288,7 +300,6 @@ function buildPath(tree: DiagramTerm): SVGElement {
 
 	// function w
 	(function draw(node = tree) {
-		// let x1, x2, y1, y2;
 		switch (node.type) {
 			case "ABSTRACTION":
 				node.x1 ??= style.linewidth / 2;
@@ -300,15 +311,6 @@ function buildPath(tree: DiagramTerm): SVGElement {
 					pathStr += `M ${node.x1} ${line.y} L ${node.x2} ${line.y}`;
 				}
 
-				// node.x ??= style.linewidth / 2;
-				// node.y ??= style.linewidth / 2;
-				// node.w ??= 100;
-				// node.h ??= 0;
-				// for (const [, line] of node.paramLines!) {
-				// 	line.y ??= style.linewidth / 2;
-				// 	pathStr += `M ${node.x} ${line.y} L ${node.x + node.w} ${line.y}`;
-				// }
-
 				draw(node.body);
 				break;
 			case "APPLICATION":
@@ -316,7 +318,7 @@ function buildPath(tree: DiagramTerm): SVGElement {
 				node.x2 ??= style.linewidth / 2;
 				node.y ??= style.linewidth / 2;
 				pathStr += `M ${node.x1} ${node.y} L ${node.x2} ${node.y}`;
-				console.log(node.x1, node.x2, node.y);
+				// console.log(node.x1, node.x2, node.y);
 				draw(node.left);
 				draw(node.right);
 				break;
@@ -324,6 +326,7 @@ function buildPath(tree: DiagramTerm): SVGElement {
 				node.x ??= style.linewidth / 2;
 				node.y1 ??= style.linewidth / 2;
 				node.y2 ??= style.linewidth / 2;
+				console.log(node.x, node.y1, node.y2);
 				pathStr += `M ${node.x} ${node.y1} L ${node.x} ${node.y2}`;
 				break;
 		}
