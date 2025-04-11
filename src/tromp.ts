@@ -29,7 +29,6 @@ interface DiagramApplication {
 	left: DiagramTerm;
 	right: DiagramTerm;
 	parent?: DiagramTerm;
-	leftmost?: DiagramTerm;
 
 	x1?: number;
 	x2?: number;
@@ -53,7 +52,7 @@ function setAttributes(elem: Element, attr: Record<string, any>) {
 }
 function createSVG(tag: string, attr?: Record<string, any>) {
 	const svg = document.createElementNS("http://www.w3.org/2000/svg", tag);
-	if (attr) setAttributes(svg, { ...attr, xmnls: "http://www.w3.org/2000/svg" });
+	if (attr) setAttributes(svg, attr);
 	return svg;
 }
 
@@ -75,9 +74,8 @@ function rebuildTree(tree: Term): DiagramTerm {
 		right.parent = node;
 		return node;
 	} else {
-		const parameters: Variable[] = [];
-
 		// Find all parameters until first non-abstraction is hit
+		const parameters: Variable[] = [];
 		const trueBody = (function findParameters(tree: Abstraction) {
 			parameters.push(tree.param);
 			if (isAbstraction(tree.body)) return findParameters(tree.body);
@@ -101,39 +99,6 @@ const style = {
 	applicationColGap: 10,
 	pad: 2,
 };
-export function constructDiagram(tree: SyntaxTree) {
-	const AST = rebuildTree(tree._tree);
-	setUpPositionAndSizes(AST);
-
-	let width = 0;
-	let current: DiagramTerm | null = AST;
-	while (current) {
-		switch (current.type) {
-			case "ABSTRACTION":
-				width = current.x2!;
-				current = null;
-				break;
-			case "APPLICATION":
-				current = current.right;
-				break;
-			case "VARIABLE":
-				width = current.x!;
-				current = null;
-		}
-	}
-
-	const height = findLeftMostTerm(AST).y2;
-
-	const path = buildPath(AST);
-	const svg = createSVG("svg", {
-		viewBox: `0 0 ${width} ${height}`,
-		stroke: "black",
-		"stroke-width": style.linewidth,
-		"stroke-linecap": "butt",
-	});
-	svg.append(path);
-	return svg;
-}
 
 function findRelevantAbstraction(node: DiagramTerm, sym: Variable) {
 	let first: DiagramAbstraction | null = null;
@@ -154,50 +119,32 @@ function findRelevantAbstraction(node: DiagramTerm, sym: Variable) {
 	return { first, binding };
 }
 
-function findLeftMostTerm(term: DiagramTerm) {
-	let variable: DiagramTerm | null = null;
+function findExtremeTerm(
+	term: DiagramTerm,
+	direction: "LEFT" | "RIGHT"
+): DiagramVariable {
 	let current: DiagramTerm | null = term;
+	let result: DiagramTerm | null = null;
+
 	while (current) {
 		switch (current.type) {
 			case "ABSTRACTION":
 				current = current.body;
 				break;
 			case "APPLICATION":
-				current = current.left;
+				current = direction === "LEFT" ? current.left : current.right;
 				break;
 			case "VARIABLE":
-				variable = current;
+				result = current;
 				current = null;
 				break;
 		}
 	}
 
-	if (!variable) throw SyntaxError("Could not find leftmost variable");
-
-	return variable;
-}
-
-function findRightMostTerm(term: DiagramTerm) {
-	let variable: DiagramTerm | null = null;
-	let current: DiagramTerm | null = term;
-	while (current) {
-		switch (current.type) {
-			case "ABSTRACTION":
-				current = current.body;
-				break;
-			case "APPLICATION":
-				current = current.right;
-				break;
-			case "VARIABLE":
-				variable = current;
-				current = null;
-				break;
-		}
+	if (!result || result.type !== "VARIABLE") {
+		throw new SyntaxError(`Could not find ${direction}-most variable`);
 	}
-
-	if (!variable) throw SyntaxError("Could not find leftmost variable");
-
-	return variable;
+	return result;
 }
 
 function hasRightMostAbstraction(node: DiagramTerm): boolean {
@@ -211,101 +158,77 @@ function hasRightMostAbstraction(node: DiagramTerm): boolean {
 	}
 }
 
-function setUpPositionAndSizes(tree: DiagramTerm) {
-	console.log(tree);
-	// switch (h2.type) {
-	// 	case "ABSTRACTION":
-	// 		break;
-	// 	case "APPLICATION":
-	// 		break;
-	// 	case "VARIABLE":
-	// 		break;
-	// }
+function computeHeights(t: DiagramTerm, y = style.linewidth / 2) {
+	switch (t.type) {
+		case "ABSTRACTION":
+			t.paramLines = new Map(
+				t.parameters.map((p) => {
+					const lineY = y;
+					y += style.paramLineGap;
+					return [p, { symbol: p, y: lineY }];
+				})
+			);
 
-	// Pass 1: Calculate y values
-	(function heightPass(t: DiagramTerm, y = style.linewidth / 2): DiagramTerm {
-		switch (t.type) {
-			case "ABSTRACTION":
-				t.paramLines = new Map(
-					t.parameters.map((p) => {
-						const lineY = y;
-						y += style.paramLineGap;
-						return [p, { symbol: p, y: lineY }];
-					})
-				);
+			computeHeights(t.body, y);
+			break;
 
-				heightPass(t.body, y);
-				return t;
-			case "APPLICATION":
-				const h1 = heightPass(t.left, y);
-				const h2 = heightPass(t.right, y);
-				const stem = findLeftMostTerm(h1);
-				const branch = findLeftMostTerm(h2);
+		case "APPLICATION":
+			computeHeights(t.left, y);
+			computeHeights(t.right, y);
 
-				stem.y2 = branch.y2 = Math.max(stem.y2!, branch.y2!);
-				t.y = branch.y2;
+			const stem = findExtremeTerm(t.left, "LEFT");
+			const branch = findExtremeTerm(t.right, "LEFT");
 
-				// console.log(stem, stem.y2, (branch.y2 ?? 0) + style.applicationRowGap);
-				stem.y2 = Math.max(
-					stem.y2 ?? 0,
-					(branch.y2 ?? 0) + style.applicationRowGap
-				);
+			t.y = branch.y2 = Math.max(stem.y2!, branch.y2!);
+			stem.y2 = Math.max(stem.y2!, branch.y2 + style.applicationRowGap);
+			break;
 
-				return t;
-			case "VARIABLE":
-				// Possibly end height could be determined tracking depth?
-				const { first, binding } = findRelevantAbstraction(t, t.symbol);
-				t.y1 = binding?.paramLines?.get(t.symbol)?.y ?? -10;
-				// FIXME: Could fail if no abstraction at all, should fix that
-				t.y2 = first?.paramLines?.get(first?.parameters.at(-1)!)?.y;
-				t.y2! += style.applicationRowGap;
-				return t;
-		}
-	})(tree);
+		case "VARIABLE":
+			const { first, binding } = findRelevantAbstraction(t, t.symbol);
+			t.y1 = binding?.paramLines?.get(t.symbol)?.y ?? -10;
+			t.y2 = first?.paramLines?.get(first?.parameters.at(-1)!)?.y ?? 0;
+			t.y2 += style.applicationRowGap;
+			break;
+	}
+}
 
-	// Pass 2: Calculate x values
-	(function widthPass(t: DiagramTerm, x = 0): DiagramTerm {
-		switch (t.type) {
-			case "ABSTRACTION":
-				t.x1 = x;
-				x += style.applicationColGap;
+function computeWidths(t: DiagramTerm, x = 0) {
+	switch (t.type) {
+		case "ABSTRACTION":
+			t.x1 = x;
+			x += style.applicationColGap;
 
-				widthPass(t.body, x);
+			computeWidths(t.body, x);
 
-				const variable = findRightMostTerm(t.body);
-				t.x2 = variable.x! + style.applicationColGap;
-				return t;
-			case "APPLICATION":
-				const h1 = widthPass(t.left, x);
+			// Abstraction/parameter line width
+			const variable = findExtremeTerm(t.body, "RIGHT");
+			t.x2 = variable.x! + style.applicationColGap;
+			break;
+		case "APPLICATION":
+			computeWidths(t.left, x);
 
-				x = findRightMostTerm(h1).x! + style.applicationColGap;
-				if (hasRightMostAbstraction(h1)) x += style.pad;
-				const h2 = widthPass(t.right, x);
+			// Update x to new position
+			x = findExtremeTerm(t.left, "RIGHT").x! + style.applicationColGap;
+			if (hasRightMostAbstraction(t.left)) x += style.pad;
 
-				const stem = findLeftMostTerm(h1);
-				const branch = findLeftMostTerm(h2);
+			computeWidths(t.right, x);
 
-				t.x1 = stem.x! - style.linewidth / 2;
-				t.x2 = branch.x! + style.linewidth / 2;
-				return t;
-			case "VARIABLE":
-				t.x = x;
-				return t;
-		}
-	})(tree);
+			// Setup application line
+			t.x1 = findExtremeTerm(t.left, "LEFT").x! - style.linewidth / 2;
+			t.x2 = findExtremeTerm(t.right, "LEFT").x! + style.linewidth / 2;
+			break;
+		case "VARIABLE":
+			t.x = x;
+			break;
+	}
 }
 
 function buildPath(tree: DiagramTerm): SVGElement {
 	let pathStr = "";
 
-	// function w
 	(function draw(node = tree) {
 		switch (node.type) {
 			case "ABSTRACTION":
-				node.x1 ??= style.linewidth / 2;
-				node.x2 ??= style.linewidth / 2;
-				node.y1 ??= style.linewidth / 2;
-				node.y2 ??= style.linewidth / 2;
 				for (const [, line] of node.paramLines!) {
 					line.y ??= style.linewidth / 2;
 					pathStr += `M ${node.x1} ${line.y} L ${node.x2} ${line.y}`;
@@ -313,20 +236,14 @@ function buildPath(tree: DiagramTerm): SVGElement {
 
 				draw(node.body);
 				break;
+
 			case "APPLICATION":
-				node.x1 ??= style.linewidth / 2;
-				node.x2 ??= style.linewidth / 2;
-				node.y ??= style.linewidth / 2;
 				pathStr += `M ${node.x1} ${node.y} L ${node.x2} ${node.y}`;
-				// console.log(node.x1, node.x2, node.y);
 				draw(node.left);
 				draw(node.right);
 				break;
+
 			case "VARIABLE":
-				node.x ??= style.linewidth / 2;
-				node.y1 ??= style.linewidth / 2;
-				node.y2 ??= style.linewidth / 2;
-				// console.log(node.x, node.y1, node.y2);
 				pathStr += `M ${node.x} ${node.y1} L ${node.x} ${node.y2}`;
 				break;
 		}
@@ -334,4 +251,39 @@ function buildPath(tree: DiagramTerm): SVGElement {
 
 	const elem = createSVG("path", { d: pathStr });
 	return elem;
+}
+
+export function constructDiagram(tree: SyntaxTree) {
+	const diagramTree = rebuildTree(tree._tree);
+	computeHeights(diagramTree);
+	computeWidths(diagramTree);
+
+	let width = 0;
+	let current: DiagramTerm | null = diagramTree;
+	while (current) {
+		switch (current.type) {
+			case "ABSTRACTION":
+				width = current.x2!;
+				current = null;
+				break;
+			case "APPLICATION":
+				current = current.right;
+				break;
+			case "VARIABLE":
+				width = current.x!;
+				current = null;
+		}
+	}
+
+	const height = findExtremeTerm(diagramTree, "LEFT").y2;
+
+	const path = buildPath(diagramTree);
+	const svg = createSVG("svg", {
+		viewBox: `0 0 ${width} ${height}`,
+		stroke: "black",
+		"stroke-width": style.linewidth,
+		"stroke-linecap": "butt",
+	});
+	svg.append(path);
+	return svg;
 }

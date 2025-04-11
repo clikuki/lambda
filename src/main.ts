@@ -8,15 +8,16 @@ const OR = "@f.@g.ffg";
 const AND = "@f.@g.fgf";
 
 const syntaxTree = new SyntaxTree(
-	// code`${OR}(${NOT}(${AND}${TRUE}${FALSE}))(${OR}${FALSE}${FALSE})`
+	code`${OR}(${NOT}(${AND}${TRUE}${FALSE}))(${OR}${FALSE}${FALSE})`
 	// code`${OR}${FALSE}${TRUE}`
-	"@f.@x.f(fx)"
-	// TRUE
+	// OR
+	// "@f.@x.f(fx)"
+	// code`${NOT}(${AND}${TRUE}${FALSE})`
 );
 console.log(syntaxTree.toString());
-syntaxTree.betaReduce(true);
+syntaxTree.betaReduce();
+// syntaxTree.betaReduce();
 console.log(syntaxTree.toString());
 
 const svg = constructDiagram(syntaxTree);
-svg.style.width = "500px";
 document.body.appendChild(svg);
