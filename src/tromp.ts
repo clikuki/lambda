@@ -200,14 +200,14 @@ function findRightMostTerm(term: DiagramTerm) {
 	return variable;
 }
 
-function countLeaves(node: DiagramTerm): number {
+function hasRightMostAbstraction(node: DiagramTerm): boolean {
 	switch (node.type) {
 		case "ABSTRACTION":
-			return countLeaves(node.body);
+			return true;
 		case "APPLICATION":
-			return countLeaves(node.left) + countLeaves(node.right);
+			return hasRightMostAbstraction(node.right);
 		case "VARIABLE":
-			return 1;
+			return false;
 	}
 }
 
@@ -267,19 +267,19 @@ function setUpPositionAndSizes(tree: DiagramTerm) {
 	(function widthPass(t: DiagramTerm, x = 0): DiagramTerm {
 		switch (t.type) {
 			case "ABSTRACTION":
-				t.x1 = x + (!x ? 0 : style.pad / 2);
+				t.x1 = x;
 				x += style.applicationColGap;
 
 				widthPass(t.body, x);
 
 				const variable = findRightMostTerm(t.body);
-				t.x2 = variable.x! - style.pad / 2 + style.applicationColGap;
+				t.x2 = variable.x! + style.applicationColGap;
 				return t;
 			case "APPLICATION":
 				const h1 = widthPass(t.left, x);
 
 				x = findRightMostTerm(h1).x! + style.applicationColGap;
-				// if (t.right.type === "ABSTRACTION") x += style.pad;
+				if (hasRightMostAbstraction(h1)) x += style.pad;
 				const h2 = widthPass(t.right, x);
 
 				const stem = findLeftMostTerm(h1);
