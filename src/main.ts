@@ -9,7 +9,9 @@ const AND = "@f.@g.fgf";
 
 const syntaxTree = new SyntaxTree(
 	// code`${OR}(${NOT}(${AND}${TRUE}${FALSE}))(${OR}${FALSE}${FALSE})`
-	code`${OR}${FALSE}${TRUE}`
+	// code`${OR}${FALSE}${TRUE}`
+	"@f.@x.f(fx)"
+	// TRUE
 );
 console.log(syntaxTree.toString());
 syntaxTree.betaReduce(true);
