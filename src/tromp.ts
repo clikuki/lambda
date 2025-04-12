@@ -42,7 +42,6 @@ type DiagramTerm = DiagramAbstraction | DiagramApplication | DiagramVariable;
 
 function setAttributes(elem: Element, attr: Record<string, any>) {
 	for (const key in attr) {
-		// console.trace(key, attr[key]);
 		elem.setAttribute(key, attr[key]);
 	}
 }
@@ -159,13 +158,13 @@ function hasAbstractionAtExtreme(
 	}
 }
 
-function computeHeights(t: DiagramTerm, y = style.linewidth / 2) {
+function computeHeights(t: DiagramTerm, y = 0) {
 	switch (t.type) {
 		case "ABSTRACTION":
 			t.y1 = y;
 			t.paramLines = new Map(
 				t.parameters.map((p) => {
-					const lineY = y;
+					const lineY = y + style.linewidth / 2;
 					y += style.paramLineGap;
 					return [p, { symbol: p, y: lineY }];
 				})
@@ -281,17 +280,21 @@ export function renderDiagram(tree: DiagramTerm) {
 				const newOx = node.x1! - ox;
 				const newOy = node.y1! - oy;
 
-				// // Debug: Show abstraction bounding box
-				// svg.appendChild(
-				// 	createSVG("rect", {
-				// 		x: node.x1,
-				// 		y: node.y1,
-				// 		width: node.x2! - node.x1!,
-				// 		height: node.y2! - node.y1!,
-				// 		fill: "red",
-				// 		stroke: "none",
-				// 	})
-				// );
+				// Debug: Show abstraction bounding box
+				svg.appendChild(
+					createSVG("rect", {
+						x: node.x1,
+						y: node.y1,
+						// Node size
+						width: node.x2! - node.x1!,
+						height: node.y2! - node.y1!,
+						// // Tree size
+						// width: subwidth,
+						// height: subheight,
+						fill: "#f007",
+						stroke: "none",
+					})
+				);
 
 				const absSvg = createSVG("svg", {
 					viewBox: `${-newOx} ${-newOy} ${subwidth} ${subheight}`,
@@ -302,7 +305,6 @@ export function renderDiagram(tree: DiagramTerm) {
 					"stroke-linecap": "butt",
 				});
 
-				console.log(node, newOx, newOy);
 				for (const [, line] of node.paramLines!) {
 					const clr =
 						"#" + (((1 << 24) * Math.random()) | 0).toString(16).padStart(6, "0");
@@ -325,21 +327,12 @@ export function renderDiagram(tree: DiagramTerm) {
 						})
 					);
 
-					const paramLine = createSVG("line", {
-						x1: node.x1! - newOx,
-						x2: node.x2! - newOx,
-						y1: line.y - newOy,
-						y2: line.y - newOy,
-					});
-					absSvg.appendChild(paramLine);
-
-					elem.appendChild(
+					absSvg.appendChild(
 						createSVG("line", {
-							x1: node.x1!,
-							x2: node.x2!,
-							y1: line.y,
-							y2: line.y,
-							stroke: "red",
+							x1: node.x1! - newOx,
+							x2: node.x2! - newOx,
+							y1: line.y - newOy,
+							y2: line.y - newOy,
 						})
 					);
 				}
