@@ -207,7 +207,7 @@ export function parseString(
 			localMapping.set(paramChar, param);
 
 			// All characters at this point must be consumed
-			const body = parseString(code.slice(start, end), localMapping);
+			const body = parseString(code.slice(start, end), localMapping, id);
 			const abstraction: Abstraction = {
 				type: "ABSTRACTION",
 				param,
@@ -224,7 +224,7 @@ export function parseString(
 			const start = i + 1;
 			const end = findBracketPair(code, i);
 
-			let term = parseString(code.slice(start, end), mapping);
+			let term = parseString(code.slice(start, end), mapping, id);
 			if (!left) left = term;
 			else right = term;
 
