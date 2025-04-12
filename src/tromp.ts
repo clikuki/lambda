@@ -42,6 +42,7 @@ type DiagramTerm = DiagramAbstraction | DiagramApplication | DiagramVariable;
 
 function setAttributes(elem: Element, attr: Record<string, any>) {
 	for (const key in attr) {
+		// console.trace(key, attr[key]);
 		elem.setAttribute(key, attr[key]);
 	}
 }
@@ -143,12 +144,16 @@ function findExtremeTerm(
 	return result;
 }
 
-function hasRightMostAbstraction(node: DiagramTerm): boolean {
+function hasAbstractionAtExtreme(
+	node: DiagramTerm,
+	direction: "LEFT" | "RIGHT"
+): boolean {
 	switch (node.type) {
 		case "ABSTRACTION":
 			return true;
 		case "APPLICATION":
-			return hasRightMostAbstraction(node.right);
+			const child = direction === "LEFT" ? node.left : node.right;
+			return hasAbstractionAtExtreme(child, direction);
 		case "VARIABLE":
 			return false;
 	}
@@ -157,6 +162,7 @@ function hasRightMostAbstraction(node: DiagramTerm): boolean {
 function computeHeights(t: DiagramTerm, y = style.linewidth / 2) {
 	switch (t.type) {
 		case "ABSTRACTION":
+			t.y1 = y;
 			t.paramLines = new Map(
 				t.parameters.map((p) => {
 					const lineY = y;
@@ -165,7 +171,9 @@ function computeHeights(t: DiagramTerm, y = style.linewidth / 2) {
 				})
 			);
 
-			computeHeights(t.body, (y -= style.paramLineGap));
+			computeHeights(t.body, y);
+
+			t.y2 = findExtremeTerm(t.body, "LEFT").y2;
 			break;
 
 		case "APPLICATION":
@@ -176,7 +184,7 @@ function computeHeights(t: DiagramTerm, y = style.linewidth / 2) {
 			const branch = findExtremeTerm(t.right, "LEFT");
 
 			t.y = branch.y2 = Math.max(stem.y2!, branch.y2!);
-			stem.y2 = Math.max(stem.y2!, branch.y2 + style.applicationRowGap);
+			stem.y2 = Math.max(stem.y2!, branch.y2 + style.paramLineGap);
 			break;
 
 		case "VARIABLE":
@@ -192,7 +200,10 @@ function computeWidths(t: DiagramTerm, x = 0) {
 	switch (t.type) {
 		case "ABSTRACTION":
 			t.x1 = x;
-			x += style.applicationColGap;
+			if (!hasAbstractionAtExtreme(t.body, "LEFT")) {
+				// Avoids compounding left paddings with separate inner abstractions
+				x += style.applicationColGap;
+			}
 
 			computeWidths(t.body, x);
 
@@ -205,7 +216,7 @@ function computeWidths(t: DiagramTerm, x = 0) {
 
 			// Update x to new position
 			x = findExtremeTerm(t.left, "RIGHT").x! + style.applicationColGap;
-			if (hasRightMostAbstraction(t.left)) x += style.pad;
+			if (hasAbstractionAtExtreme(t.left, "RIGHT")) x += style.pad;
 
 			computeWidths(t.right, x);
 
@@ -217,36 +228,6 @@ function computeWidths(t: DiagramTerm, x = 0) {
 			t.x = x;
 			break;
 	}
-}
-
-function buildPath(tree: DiagramTerm): SVGElement {
-	let pathStr = "";
-
-	(function draw(node = tree) {
-		switch (node.type) {
-			case "ABSTRACTION":
-				for (const [, line] of node.paramLines!) {
-					line.y ??= style.linewidth / 2;
-					pathStr += `M ${node.x1} ${line.y} L ${node.x2} ${line.y}`;
-				}
-
-				draw(node.body);
-				break;
-
-			case "APPLICATION":
-				pathStr += `M ${node.x1} ${node.y} L ${node.x2} ${node.y}`;
-				draw(node.left);
-				draw(node.right);
-				break;
-
-			case "VARIABLE":
-				pathStr += `M ${node.x} ${node.y1} L ${node.x} ${node.y2}`;
-				break;
-		}
-	})();
-
-	const elem = createSVG("path", { d: pathStr });
-	return elem;
 }
 
 function getTreeSize(tree: DiagramTerm): [number, number] {
@@ -279,15 +260,122 @@ export function constructDiagram(tree: SyntaxTree) {
 	const diagramTree = rebuildTree(tree._tree);
 	computeHeights(diagramTree);
 	computeWidths(diagramTree);
+	return diagramTree;
+}
 
-	const [height, width] = getTreeSize(diagramTree);
-	const path = buildPath(diagramTree);
-	const svg = createSVG("svg", {
+export function renderDiagram(tree: DiagramTerm) {
+	const [height, width] = getTreeSize(tree);
+
+	const elem = createSVG("svg", {
 		viewBox: `0 0 ${width} ${height}`,
 		stroke: "black",
 		"stroke-width": style.linewidth,
 		"stroke-linecap": "butt",
 	});
-	svg.append(path);
-	return svg;
+
+	const debugCircles: SVGElement[] = [];
+	(function draw(node: DiagramTerm, svg = elem, ox = 0, oy = 0) {
+		switch (node.type) {
+			case "ABSTRACTION":
+				const [subheight, subwidth] = getTreeSize(node);
+				const newOx = node.x1! - ox;
+				const newOy = node.y1! - oy;
+
+				// // Debug: Show abstraction bounding box
+				// svg.appendChild(
+				// 	createSVG("rect", {
+				// 		x: node.x1,
+				// 		y: node.y1,
+				// 		width: node.x2! - node.x1!,
+				// 		height: node.y2! - node.y1!,
+				// 		fill: "red",
+				// 		stroke: "none",
+				// 	})
+				// );
+
+				const absSvg = createSVG("svg", {
+					viewBox: `${-newOx} ${-newOy} ${subwidth} ${subheight}`,
+					width: subwidth,
+					height: subheight,
+					stroke: "black",
+					"stroke-width": style.linewidth,
+					"stroke-linecap": "butt",
+				});
+
+				console.log(node, newOx, newOy);
+				for (const [, line] of node.paramLines!) {
+					const clr =
+						"#" + (((1 << 24) * Math.random()) | 0).toString(16).padStart(6, "0");
+					debugCircles.push(
+						createSVG("circle", {
+							cx: node.x1,
+							cy: line.y,
+							r: 0.5,
+							stroke: clr,
+							"z-index": 1,
+						})
+					);
+					debugCircles.push(
+						createSVG("circle", {
+							cx: node.x2,
+							cy: line.y,
+							r: 0.5,
+							stroke: clr,
+							"z-index": 1,
+						})
+					);
+
+					const paramLine = createSVG("line", {
+						x1: node.x1! - newOx,
+						x2: node.x2! - newOx,
+						y1: line.y - newOy,
+						y2: line.y - newOy,
+					});
+					absSvg.appendChild(paramLine);
+
+					elem.appendChild(
+						createSVG("line", {
+							x1: node.x1!,
+							x2: node.x2!,
+							y1: line.y,
+							y2: line.y,
+							stroke: "red",
+						})
+					);
+				}
+
+				draw(node.body, absSvg, newOx, newOy);
+				svg.appendChild(absSvg);
+				break;
+
+			case "APPLICATION":
+				const applicationLine = createSVG("line", {
+					x1: node.x1! - ox,
+					x2: node.x2! - ox,
+					y1: node.y! - oy,
+					y2: node.y! - oy,
+				});
+				svg.appendChild(applicationLine);
+
+				draw(node.left, svg, ox, oy);
+				draw(node.right, svg, ox, oy);
+				break;
+
+			case "VARIABLE":
+				const variableLine = createSVG("line", {
+					x1: node.x! - ox,
+					x2: node.x! - ox,
+					y1: node.y1! - oy,
+					y2: node.y2! - oy,
+				});
+				svg.appendChild(variableLine);
+				break;
+		}
+	})(tree);
+	// elem.append(...debugCircles);
+	// })(isAbstraction ? tree.body : tree);
+
+	// const path = buildPath(tree);
+	// svg.append(path);
+	return elem;
 }
