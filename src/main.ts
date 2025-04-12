@@ -8,19 +8,20 @@ const OR = "@f.@g.ffg";
 const AND = "@f.@g.fgf";
 
 const syntaxTree = new SyntaxTree(
-	// code`${OR}(${NOT}(${AND}${TRUE}yasd))(${OR}${FALSE}${FALSE})`
 	code`${OR}${FALSE}${TRUE}`
 	// OR
 	// "@f.@x.f(fx)"
 	// code`${NOT}(${AND}${TRUE}${FALSE})`
 	// "@x.ax"
 );
-// console.log(syntaxTree.toString());
-syntaxTree.betaReduce();
-// syntaxTree.betaReduce();
-console.log(syntaxTree.toString());
 
-const diagram = constructDiagram(syntaxTree);
-console.log(diagram);
-const svg = renderDiagram(diagram);
-document.body.appendChild(svg);
+// initialize svg
+let prevDiagram = constructDiagram(syntaxTree);
+document.body.appendChild(renderDiagram(prevDiagram));
+
+document.body.addEventListener("click", () => {
+	syntaxTree.betaReduce();
+	const diagram = constructDiagram(syntaxTree);
+	document.body.replaceChildren(renderDiagram(diagram));
+	prevDiagram = diagram;
+});

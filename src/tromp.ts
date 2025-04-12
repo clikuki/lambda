@@ -1,4 +1,5 @@
 import { SyntaxTree, type Abstraction, type Term } from "./lambda.js";
+import { createSVG, ID } from "./utils.js";
 
 interface ParameterLine {
 	symbol: symbol;
@@ -9,7 +10,7 @@ interface DiagramAbstraction {
 	parameters: symbol[];
 	body: DiagramApplication | DiagramVariable;
 	parent?: DiagramTerm;
-	id: symbol;
+	id: ID;
 
 	x1?: number;
 	x2?: number;
@@ -22,7 +23,7 @@ interface DiagramApplication {
 	left: DiagramTerm;
 	right: DiagramTerm;
 	parent?: DiagramTerm;
-	id: symbol;
+	id: ID;
 
 	x1?: number;
 	x2?: number;
@@ -32,24 +33,13 @@ interface DiagramVariable {
 	type: "VARIABLE";
 	symbol: symbol;
 	parent?: DiagramTerm;
-	id: symbol;
+	id: ID;
 
 	x?: number;
 	y1?: number;
 	y2?: number;
 }
 type DiagramTerm = DiagramAbstraction | DiagramApplication | DiagramVariable;
-
-function setAttributes(elem: Element, attr: Record<string, any>) {
-	for (const key in attr) {
-		elem.setAttribute(key, attr[key]);
-	}
-}
-function createSVG(tag: string, attr?: Record<string, any>) {
-	const svg = document.createElementNS("http://www.w3.org/2000/svg", tag);
-	if (attr) setAttributes(svg, attr);
-	return svg;
-}
 
 function rebuildTree(tree: Term): DiagramTerm {
 	if (tree.type === "VARIABLE")
@@ -268,6 +258,8 @@ export function renderDiagram(tree: DiagramTerm) {
 	const elem = createSVG("svg", {
 		viewBox: `0 0 ${width} ${height}`,
 		stroke: "black",
+		width: width,
+		height: height,
 		"stroke-width": style.linewidth,
 		"stroke-linecap": "butt",
 	});
@@ -297,6 +289,7 @@ export function renderDiagram(tree: DiagramTerm) {
 				);
 
 				const absSvg = createSVG("svg", {
+					id: node.id.str,
 					viewBox: `${-newOx} ${-newOy} ${subwidth} ${subheight}`,
 					width: subwidth,
 					height: subheight,
@@ -343,6 +336,7 @@ export function renderDiagram(tree: DiagramTerm) {
 
 			case "APPLICATION":
 				const applicationLine = createSVG("line", {
+					id: node.id.str,
 					x1: node.x1! - ox,
 					x2: node.x2! - ox,
 					y1: node.y! - oy,
@@ -356,6 +350,7 @@ export function renderDiagram(tree: DiagramTerm) {
 
 			case "VARIABLE":
 				const variableLine = createSVG("line", {
+					id: node.id.str,
 					x1: node.x! - ox,
 					x2: node.x! - ox,
 					y1: node.y1! - oy,
@@ -365,10 +360,6 @@ export function renderDiagram(tree: DiagramTerm) {
 				break;
 		}
 	})(tree);
-	// elem.append(...debugCircles);
-	// })(isAbstraction ? tree.body : tree);
 
-	// const path = buildPath(tree);
-	// svg.append(path);
 	return elem;
 }

@@ -1,19 +1,21 @@
+import { getID, ID } from "./utils.js";
+
 export interface Abstraction {
 	type: "ABSTRACTION";
 	param: symbol;
 	body: Term;
-	id: symbol;
+	id: ID;
 }
 export interface Application {
 	type: "APPLICATION";
 	left: Term;
 	right: Term;
-	id: symbol;
+	id: ID;
 }
 export interface Variable {
 	type: "VARIABLE";
 	symbol: symbol;
-	id: symbol;
+	id: ID;
 }
 export type Term = Application | Abstraction | Variable;
 
@@ -186,7 +188,8 @@ export class SyntaxTree {
 export const func_char = "@";
 export function parseString(
 	code: string,
-	mapping = new Map<string, symbol>()
+	mapping = new Map<string, symbol>(),
+	id = getID()
 ): Term {
 	let left: Term | null = null;
 	let right: Term | null = null;
@@ -209,7 +212,7 @@ export function parseString(
 				type: "ABSTRACTION",
 				param,
 				body,
-				id: Symbol(),
+				id: id.next().value,
 			};
 
 			if (!left) left = abstraction;
@@ -235,7 +238,7 @@ export function parseString(
 			const variable: Term = {
 				type: "VARIABLE",
 				symbol: sym,
-				id: Symbol(),
+				id: id.next().value,
 			};
 			if (!left) left = variable;
 			else right = variable;
@@ -243,7 +246,7 @@ export function parseString(
 
 		if (right) {
 			// Group a and b into an application
-			left = { type: "APPLICATION", left, right, id: Symbol() };
+			left = { type: "APPLICATION", left, right, id: id.next().value };
 			right = null;
 		}
 	}
