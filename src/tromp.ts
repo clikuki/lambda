@@ -1,13 +1,14 @@
 import { SyntaxTree, type Abstraction, type Term } from "./lambda.js";
-import { createSVG, ID } from "./utils.js";
+import { createSVG, ID, setAttributes } from "./utils.js";
 
-interface ParameterLine {
+interface Parameter {
 	symbol: symbol;
 	y: number;
+	id: ID;
 }
 interface DiagramAbstraction {
 	type: "ABSTRACTION";
-	parameters: symbol[];
+	parameters: [symbol, ID][];
 	body: DiagramApplication | DiagramVariable;
 	parent?: DiagramTerm;
 	id: ID;
@@ -16,7 +17,7 @@ interface DiagramAbstraction {
 	x2?: number;
 	y1?: number;
 	y2?: number;
-	paramLines?: Map<symbol, ParameterLine>;
+	paramLines?: Map<symbol, Parameter>;
 }
 interface DiagramApplication {
 	type: "APPLICATION";
@@ -62,12 +63,12 @@ function rebuildTree(tree: Term): DiagramTerm {
 		return node;
 	} else {
 		// Find all parameters until first non-abstraction is hit
-		const parameters: symbol[] = [];
-		const trueBody = (function findParameters(tree: Abstraction): Term {
-			parameters.push(tree.param);
-			if (tree.body.type === "ABSTRACTION") return findParameters(tree.body);
-			else return tree.body;
-		})(tree);
+		const parameters: [symbol, ID][] = [];
+		const trueBody = (function findParameters(node = tree): Term {
+			parameters.push([node.param, node.id]);
+			if (node.body.type === "ABSTRACTION") return findParameters(node.body);
+			else return node.body;
+		})();
 
 		const node: DiagramAbstraction = {
 			type: "ABSTRACTION",
@@ -153,10 +154,10 @@ function computeHeights(t: DiagramTerm, y = 0) {
 		case "ABSTRACTION":
 			t.y1 = y;
 			t.paramLines = new Map(
-				t.parameters.map((p) => {
+				t.parameters.map(([p, id]) => {
 					const lineY = y + style.linewidth / 2;
 					y += style.paramLineGap;
-					return [p, { symbol: p, y: lineY }];
+					return [p, { symbol: p, y: lineY, id }];
 				})
 			);
 
@@ -223,22 +224,26 @@ function getTreeSize(tree: DiagramTerm): [number, number] {
 	const height = findExtremeTerm(tree, "LEFT").y2 ?? 0;
 
 	let width = 0;
-	let current: DiagramTerm | null = tree;
-	while (current) {
-		switch (current.type) {
-			case "ABSTRACTION":
-				width = current.x2!;
-				current = null;
-				break;
+	if (tree.type === "ABSTRACTION") {
+		width = tree.x2! - tree.x1!;
+	} else {
+		let current: DiagramTerm | null = tree;
+		while (current) {
+			switch (current.type) {
+				case "ABSTRACTION":
+					width = current.x2!;
+					current = null;
+					break;
 
-			case "APPLICATION":
-				current = current.right;
-				break;
+				case "APPLICATION":
+					current = current.right;
+					break;
 
-			case "VARIABLE":
-				width = current.x!;
-				current = null;
-				break;
+				case "VARIABLE":
+					width = current.x!;
+					current = null;
+					break;
+			}
 		}
 	}
 
@@ -252,19 +257,18 @@ export function constructDiagram(tree: SyntaxTree) {
 	return diagramTree;
 }
 
-export function renderDiagram(tree: DiagramTerm) {
+export function renderDiagram(tree: DiagramTerm, scale = 1) {
 	const [height, width] = getTreeSize(tree);
 
 	const elem = createSVG("svg", {
 		viewBox: `0 0 ${width} ${height}`,
 		stroke: "black",
-		width: width,
-		height: height,
+		width: width * scale,
+		height: height * scale,
 		"stroke-width": style.linewidth,
 		"stroke-linecap": "butt",
 	});
 
-	const debugCircles: SVGElement[] = [];
 	(function draw(node: DiagramTerm, svg = elem, ox = 0, oy = 0) {
 		switch (node.type) {
 			case "ABSTRACTION":
@@ -272,25 +276,20 @@ export function renderDiagram(tree: DiagramTerm) {
 				const newOx = node.x1! - ox;
 				const newOy = node.y1! - oy;
 
-				// Debug: Show abstraction bounding box
-				svg.appendChild(
-					createSVG("rect", {
-						x: node.x1,
-						y: node.y1,
-						// Node size
-						width: node.x2! - node.x1!,
-						height: node.y2! - node.y1!,
-						// // Tree size
-						// width: subwidth,
-						// height: subheight,
-						fill: "#f007",
-						stroke: "none",
-					})
-				);
+				// console.trace({
+				// 	// Node size
+				// 	nodeWidth: node.x2! - node.x1!,
+				// 	nodeHeight: node.y2! - node.y1!,
+				// 	// Tree size
+				// 	treeWidth: getTreeSize(node)[1],
+				// 	treeHeight: getTreeSize(node)[0],
+				// });
 
 				const absSvg = createSVG("svg", {
-					id: node.id.str,
-					viewBox: `${-newOx} ${-newOy} ${subwidth} ${subheight}`,
+					"lambda-id": node.id.str,
+					viewBox: `${newOx} ${newOy} ${subwidth} ${subheight}`,
+					x: newOx,
+					y: newOy,
 					width: subwidth,
 					height: subheight,
 					stroke: "black",
@@ -298,34 +297,15 @@ export function renderDiagram(tree: DiagramTerm) {
 					"stroke-linecap": "butt",
 				});
 
-				for (const [, line] of node.paramLines!) {
-					const clr =
-						"#" + (((1 << 24) * Math.random()) | 0).toString(16).padStart(6, "0");
-					debugCircles.push(
-						createSVG("circle", {
-							cx: node.x1,
-							cy: line.y,
-							r: 0.5,
-							stroke: clr,
-							"z-index": 1,
-						})
-					);
-					debugCircles.push(
-						createSVG("circle", {
-							cx: node.x2,
-							cy: line.y,
-							r: 0.5,
-							stroke: clr,
-							"z-index": 1,
-						})
-					);
-
+				for (const [sym, line] of node.paramLines!) {
 					absSvg.appendChild(
 						createSVG("line", {
-							x1: node.x1! - newOx,
-							x2: node.x2! - newOx,
-							y1: line.y - newOy,
-							y2: line.y - newOy,
+							"lambda-id": line.id.str,
+							"lambda-var": sym.description,
+							x1: node.x1!,
+							x2: node.x2!,
+							y1: line.y,
+							y2: line.y,
 						})
 					);
 				}
@@ -336,11 +316,11 @@ export function renderDiagram(tree: DiagramTerm) {
 
 			case "APPLICATION":
 				const applicationLine = createSVG("line", {
-					id: node.id.str,
-					x1: node.x1! - ox,
-					x2: node.x2! - ox,
-					y1: node.y! - oy,
-					y2: node.y! - oy,
+					"lambda-id": node.id.str,
+					x1: node.x1!,
+					x2: node.x2!,
+					y1: node.y!,
+					y2: node.y!,
 				});
 				svg.appendChild(applicationLine);
 
@@ -350,11 +330,11 @@ export function renderDiagram(tree: DiagramTerm) {
 
 			case "VARIABLE":
 				const variableLine = createSVG("line", {
-					id: node.id.str,
-					x1: node.x! - ox,
-					x2: node.x! - ox,
-					y1: node.y1! - oy,
-					y2: node.y2! - oy,
+					"lambda-id": node.id.str,
+					x1: node.x!,
+					x2: node.x!,
+					y1: node.y1!,
+					y2: node.y2!,
 				});
 				svg.appendChild(variableLine);
 				break;
@@ -362,4 +342,8 @@ export function renderDiagram(tree: DiagramTerm) {
 	})(tree);
 
 	return elem;
+}
+
+export function animateDiagram(before: SVGElement, after: SVGElement) {
+	(function update(el: SVGElement) {})(before);
 }

@@ -1,5 +1,5 @@
 import { SyntaxTree, code } from "./lambda.js";
-import { constructDiagram, renderDiagram } from "./tromp.js";
+import { animateDiagram, constructDiagram, renderDiagram } from "./tromp.js";
 
 const TRUE = "@x.@y.x";
 const FALSE = "@x.@y.y";
@@ -16,12 +16,14 @@ const syntaxTree = new SyntaxTree(
 );
 
 // initialize svg
-let prevDiagram = constructDiagram(syntaxTree);
-document.body.appendChild(renderDiagram(prevDiagram));
+let prevSvg = renderDiagram(constructDiagram(syntaxTree), 5);
+document.body.appendChild(prevSvg);
 
 document.body.addEventListener("click", () => {
 	syntaxTree.betaReduce();
 	const diagram = constructDiagram(syntaxTree);
-	document.body.replaceChildren(renderDiagram(diagram));
-	prevDiagram = diagram;
+	const svg = renderDiagram(diagram, 5);
+	document.body.appendChild(svg);
+	// animateDiagram(prevSvg, svg);
+	prevSvg = svg;
 });

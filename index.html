@@ -8,14 +8,20 @@
 		<style>
 			body {
 				margin: 0;
-				display: flex;
-				justify-content: center;
+				display: grid;
+				grid-template-areas: "a";
+				/* justify-content: center;
 				align-items: center;
-				height: 100vh;
+				height: 100vh; */
+			}
+			body > * {
+				grid-area: a;
 			}
 			body > svg {
 				margin-top: 1vh;
-				scale: 700%;
+			}
+			path, line {
+				transition: all 0.3s ease;
 			}
 		</style>
 	</head>
