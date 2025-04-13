@@ -1,5 +1,5 @@
 import { SyntaxTree, code } from "./lambda.js";
-import { animateDiagram, constructDiagram, renderDiagram } from "./tromp.js";
+import { Tromp } from "./tromp.js";
 
 const TRUE = "@x.@y.x";
 const FALSE = "@x.@y.y";
@@ -8,6 +8,7 @@ const OR = "@f.@g.ffg";
 const AND = "@f.@g.fgf";
 
 const syntaxTree = new SyntaxTree(
+	// "(@x.xx)(@x.x)"
 	code`${OR}${FALSE}${TRUE}`
 	// OR
 	// "@f.@x.f(fx)"
@@ -15,15 +16,13 @@ const syntaxTree = new SyntaxTree(
 	// "@x.ax"
 );
 
-// initialize svg
-let prevSvg = renderDiagram(constructDiagram(syntaxTree), 5);
-document.body.appendChild(prevSvg);
+const tromp = new Tromp(syntaxTree, 5);
+document.body.appendChild(tromp.svg);
 
 document.body.addEventListener("click", () => {
 	syntaxTree.betaReduce();
-	const diagram = constructDiagram(syntaxTree);
-	const svg = renderDiagram(diagram, 5);
-	document.body.appendChild(svg);
-	// animateDiagram(prevSvg, svg);
-	prevSvg = svg;
+	tromp._DiagramTree = tromp.construct();
+	const next = tromp.render();
+	tromp.animate(tromp.svg, next);
+	document.body.appendChild(next);
 });

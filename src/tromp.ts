@@ -1,6 +1,8 @@
 import { SyntaxTree, type Abstraction, type Term } from "./lambda.js";
 import { createSVG, ID, setAttributes } from "./utils.js";
 
+const startTime = Date.now();
+
 interface Parameter {
 	symbol: symbol;
 	y: number;
@@ -74,7 +76,7 @@ function rebuildTree(tree: Term): DiagramTerm {
 			type: "ABSTRACTION",
 			parameters,
 			body: rebuildTree(trueBody) as DiagramVariable,
-			id: tree.id,
+			id: parameters.at(-1)![1],
 		};
 		node.body.parent = node;
 		return node;
@@ -250,100 +252,173 @@ function getTreeSize(tree: DiagramTerm): [number, number] {
 	return [height, width];
 }
 
-export function constructDiagram(tree: SyntaxTree) {
-	const diagramTree = rebuildTree(tree._tree);
-	computeHeights(diagramTree);
-	computeWidths(diagramTree);
-	return diagramTree;
-}
+export class Tromp {
+	svg: SVGElement;
+	_lambdaTree: SyntaxTree;
+	_DiagramTree: DiagramTerm;
+	_varMap: Map<SVGElement, symbol>;
+	constructor(tree: SyntaxTree, public _scale = 1) {
+		this._lambdaTree = tree;
+		this._DiagramTree = this.construct();
+		this.svg = this.render();
+	}
+	construct() {
+		const diagramTree = rebuildTree(this._lambdaTree._tree);
+		computeHeights(diagramTree);
+		computeWidths(diagramTree);
+		return diagramTree;
+	}
+	render() {
+		const [height, width] = getTreeSize(this._DiagramTree);
 
-export function renderDiagram(tree: DiagramTerm, scale = 1) {
-	const [height, width] = getTreeSize(tree);
+		const elem = createSVG("svg", {
+			viewBox: `0 0 ${width} ${height}`,
+			stroke: "black",
+			width: width * this._scale,
+			height: height * this._scale,
+			"stroke-width": style.linewidth,
+			"stroke-linecap": "butt",
+		});
 
-	const elem = createSVG("svg", {
-		viewBox: `0 0 ${width} ${height}`,
-		stroke: "black",
-		width: width * scale,
-		height: height * scale,
-		"stroke-width": style.linewidth,
-		"stroke-linecap": "butt",
-	});
+		(function draw(node: DiagramTerm, svg = elem, ox = 0, oy = 0) {
+			switch (node.type) {
+				case "ABSTRACTION":
+					const [subheight, subwidth] = getTreeSize(node);
+					const newOx = node.x1! - ox;
+					const newOy = node.y1! - oy;
 
-	(function draw(node: DiagramTerm, svg = elem, ox = 0, oy = 0) {
-		switch (node.type) {
-			case "ABSTRACTION":
-				const [subheight, subwidth] = getTreeSize(node);
-				const newOx = node.x1! - ox;
-				const newOy = node.y1! - oy;
+					// console.trace({
+					// 	// Node size
+					// 	nodeWidth: node.x2! - node.x1!,
+					// 	nodeHeight: node.y2! - node.y1!,
+					// 	// Tree size
+					// 	treeWidth: getTreeSize(node)[1],
+					// 	treeHeight: getTreeSize(node)[0],
+					// });
 
-				// console.trace({
-				// 	// Node size
-				// 	nodeWidth: node.x2! - node.x1!,
-				// 	nodeHeight: node.y2! - node.y1!,
-				// 	// Tree size
-				// 	treeWidth: getTreeSize(node)[1],
-				// 	treeHeight: getTreeSize(node)[0],
-				// });
+					const absSvg = createSVG("svg", {
+						"lambda-id": node.id.str,
+						"lambda-type": "ABSTRACTION",
+						viewBox: `0 0 ${width} ${height}`,
+						x: newOx,
+						y: newOy,
+						width: width,
+						height: height,
+						stroke: "black",
+						"stroke-width": style.linewidth,
+						"stroke-linecap": "butt",
+					});
 
-				const absSvg = createSVG("svg", {
-					"lambda-id": node.id.str,
-					viewBox: `${newOx} ${newOy} ${subwidth} ${subheight}`,
-					x: newOx,
-					y: newOy,
-					width: subwidth,
-					height: subheight,
-					stroke: "black",
-					"stroke-width": style.linewidth,
-					"stroke-linecap": "butt",
-				});
+					for (const [sym, line] of node.paramLines!) {
+						// svg.appendChild(
+						absSvg.appendChild(
+							createSVG("line", {
+								"lambda-id": line.id.str,
+								"lambda-var": sym.description,
+								"lambda-type": "PARAMETER",
+								x1: node.x1! - newOx,
+								x2: node.x2! - newOx,
+								y1: line.y - newOy,
+								y2: line.y - newOy,
+							})
+						);
+					}
 
-				for (const [sym, line] of node.paramLines!) {
-					absSvg.appendChild(
-						createSVG("line", {
-							"lambda-id": line.id.str,
-							"lambda-var": sym.description,
-							x1: node.x1!,
-							x2: node.x2!,
-							y1: line.y,
-							y2: line.y,
-						})
-					);
+					// draw(node.body, svg, newOx, newOy);
+					draw(node.body, absSvg, newOx, newOy);
+					svg.appendChild(absSvg);
+					break;
+
+				case "APPLICATION":
+					const applicationLine = createSVG("line", {
+						"lambda-id": node.id.str,
+						"lambda-type": "APPLICATION",
+						x1: node.x1! - ox,
+						x2: node.x2! - ox,
+						y1: node.y! - oy,
+						y2: node.y! - oy,
+					});
+					svg.appendChild(applicationLine);
+
+					draw(node.left, svg, ox, oy);
+					draw(node.right, svg, ox, oy);
+					break;
+
+				case "VARIABLE":
+					// t: node.symbol,
+					const variableLine = createSVG("line", {
+						"lambda-id": node.id.str,
+						"lambda-type": "VARIABLE",
+						x1: node.x! - ox,
+						x2: node.x! - ox,
+						y1: node.y1! - oy,
+						y2: node.y2! - oy,
+					});
+					svg.appendChild(variableLine);
+					break;
+			}
+		})(this._DiagramTree);
+
+		return elem;
+	}
+	animate(before: SVGElement, after: SVGElement) {
+		const mutations: (() => void)[] = [];
+
+		(function update(el = before) {
+			const children = Array.from(el.children) as SVGElement[];
+			for (const child of children) {
+				const id = child.getAttribute("lambda-id");
+				const type = child.getAttribute("lambda-type");
+
+				const matches = after.querySelectorAll<SVGElement>(
+					`[lambda-type="${type}"][lambda-id="${id}"]`
+				);
+
+				if (matches.length) {
+					// console.log(child, matches);
+
+					for (let i = 0; i < matches.length; i++) {
+						let copy = child;
+
+						const shouldClone = i !== matches.length - 1;
+						if (shouldClone) copy = child.cloneNode(true) as SVGElement;
+
+						const attributes =
+							type === "ABSTRACTION" ? ["x", "y"] : ["x1", "x2", "y1", "y2"];
+						const oldValues = new Map(
+							attributes.map((attr) => [attr, child.getAttribute(attr)!])
+						);
+						const animations = attributes.flatMap((attr) => {
+							const newValue = matches[i].getAttribute(attr);
+							if (newValue === oldValues.get(attr)) return [];
+
+							return createSVG("animate", {
+								attributeName: attr,
+								to: newValue,
+								dur: ".3s",
+								begin: `${Date.now() - startTime}ms`,
+								fill: "freeze",
+							});
+						});
+
+						if (animations.length) {
+							mutations.push(() => {
+								if (shouldClone) el.appendChild(copy);
+								copy.append(...animations);
+							});
+						}
+					}
+
+					if (type === "ABSTRACTION") update(child);
+				} else {
+					mutations.push(() => {
+						child.setAttribute("stroke", "transparent");
+						child.addEventListener("transitionend", () => child.remove());
+					});
 				}
+			}
+		})();
 
-				draw(node.body, absSvg, newOx, newOy);
-				svg.appendChild(absSvg);
-				break;
-
-			case "APPLICATION":
-				const applicationLine = createSVG("line", {
-					"lambda-id": node.id.str,
-					x1: node.x1!,
-					x2: node.x2!,
-					y1: node.y!,
-					y2: node.y!,
-				});
-				svg.appendChild(applicationLine);
-
-				draw(node.left, svg, ox, oy);
-				draw(node.right, svg, ox, oy);
-				break;
-
-			case "VARIABLE":
-				const variableLine = createSVG("line", {
-					"lambda-id": node.id.str,
-					x1: node.x!,
-					x2: node.x!,
-					y1: node.y1!,
-					y2: node.y2!,
-				});
-				svg.appendChild(variableLine);
-				break;
-		}
-	})(tree);
-
-	return elem;
-}
-
-export function animateDiagram(before: SVGElement, after: SVGElement) {
-	(function update(el: SVGElement) {})(before);
+		mutations.forEach((cb) => cb());
+	}
 }
