@@ -1,4 +1,10 @@
-import { SyntaxTree, type Abstraction, type Term } from "./lambda.js";
+import {
+	Application,
+	Replacer,
+	SyntaxTree,
+	type Abstraction,
+	type Term,
+} from "./lambda.js";
 import { createSVG, ID, setAttributes } from "./utils.js";
 
 const startTime = Date.now();
@@ -260,7 +266,8 @@ export class Tromp {
 	constructor(tree: SyntaxTree, public _scale = 1) {
 		this._lambdaTree = tree;
 		this._DiagramTree = this.construct();
-		this.svg = this.render();
+		// this.svg = this.render();
+		this.svg = this.buildPath();
 	}
 	construct() {
 		const diagramTree = rebuildTree(this._lambdaTree._tree);
@@ -361,63 +368,198 @@ export class Tromp {
 
 		return elem;
 	}
-	animate(before: SVGElement, after: SVGElement) {
-		const mutations: (() => void)[] = [];
+	buildPath(): SVGElement {
+		const [height, width] = getTreeSize(this._DiagramTree);
+		const container = createSVG("svg", {
+			viewBox: `0 0 ${width} ${height}`,
+			stroke: "black",
+			width: width * this._scale,
+			height: height * this._scale,
+			"stroke-width": style.linewidth,
+			"stroke-linecap": "butt",
+		});
 
-		(function update(el = before) {
-			const children = Array.from(el.children) as SVGElement[];
-			for (const child of children) {
-				const id = child.getAttribute("lambda-id");
-				const type = child.getAttribute("lambda-type");
-
-				const matches = after.querySelectorAll<SVGElement>(
-					`[lambda-type="${type}"][lambda-id="${id}"]`
-				);
-
-				if (matches.length) {
-					// console.log(child, matches);
-
-					for (let i = 0; i < matches.length; i++) {
-						let copy = child;
-
-						const shouldClone = i !== matches.length - 1;
-						if (shouldClone) copy = child.cloneNode(true) as SVGElement;
-
-						const attributes =
-							type === "ABSTRACTION" ? ["x", "y"] : ["x1", "x2", "y1", "y2"];
-						const oldValues = new Map(
-							attributes.map((attr) => [attr, child.getAttribute(attr)!])
+		(function draw(node: DiagramTerm) {
+			switch (node.type) {
+				case "ABSTRACTION":
+					for (const [, line] of node.paramLines!) {
+						container.appendChild(
+							createSVG("line", {
+								"lambda-id": line.id.str,
+								x1: node.x1,
+								y1: line.y,
+								x2: node.x2,
+								y2: line.y,
+							})
 						);
-						const animations = attributes.flatMap((attr) => {
-							const newValue = matches[i].getAttribute(attr);
-							if (newValue === oldValues.get(attr)) return [];
-
-							return createSVG("animate", {
-								attributeName: attr,
-								to: newValue,
-								dur: ".3s",
-								begin: `${Date.now() - startTime}ms`,
-								fill: "freeze",
-							});
-						});
-
-						if (animations.length) {
-							mutations.push(() => {
-								if (shouldClone) el.appendChild(copy);
-								copy.append(...animations);
-							});
-						}
 					}
 
-					if (type === "ABSTRACTION") update(child);
-				} else {
-					mutations.push(() => {
-						child.setAttribute("stroke", "transparent");
-						child.addEventListener("transitionend", () => child.remove());
-					});
-				}
+					draw(node.body);
+					break;
+
+				case "APPLICATION":
+					container.appendChild(
+						createSVG("line", {
+							"lambda-id": node.id.str,
+							x1: node.x1,
+							y1: node.y,
+							x2: node.x2,
+							y2: node.y,
+						})
+					);
+					draw(node.left);
+					draw(node.right);
+					break;
+
+				case "VARIABLE":
+					container.appendChild(
+						createSVG("line", {
+							"lambda-id": node.id.str,
+							x1: node.x,
+							y1: node.y1,
+							x2: node.x,
+							y2: node.y2,
+						})
+					);
+					break;
 			}
-		})();
+		})(this._DiagramTree);
+
+		return container;
+	}
+	matchNodes(main: Term, sides: Term[], matches: [Term, Term[]][]) {
+		matches.push([main, sides]);
+		switch (main.type) {
+			case "ABSTRACTION":
+				this.matchNodes(
+					main.body,
+					sides.map((s) => {
+						if (s.type !== main.type) throw Error("Side tree does not match");
+						return s.body;
+					}),
+					matches
+				);
+				break;
+			case "APPLICATION":
+				const branches: ("left" | "right")[] = ["left", "right"];
+				for (const branch of branches) {
+					this.matchNodes(
+						main[branch],
+						sides.map((s) => {
+							if (s.type !== "APPLICATION") throw Error("Side tree does not match");
+							return s[branch];
+						}),
+						matches
+					);
+				}
+		}
+	}
+	animateAttributes(
+		mutations: (() => void)[],
+		mainEl: SVGElement,
+		sideEls: [SVGElement, ID?][],
+		attributes: string[]
+	) {
+		const oldValues = new Map(
+			attributes.map((attr) => [attr, mainEl.getAttribute(attr)!])
+		);
+
+		let isFirst = true;
+		const begin = `${Date.now() - startTime}ms`;
+		for (const [sideEl, newID] of sideEls) {
+			const copy = isFirst ? mainEl : (mainEl.cloneNode() as SVGElement);
+			isFirst = false;
+
+			const attrObj: Record<string, any> = {};
+			const animations = attributes.flatMap((attr) => {
+				const newValue = sideEl.getAttribute(attr);
+				if (newValue === oldValues.get(attr)) return [];
+				attrObj[attr] = newValue;
+
+				const animate = createSVG("animate", {
+					attributeName: attr,
+					to: newValue,
+					dur: ".3s",
+					begin,
+					fill: "freeze",
+				});
+
+				animate.addEventListener("endEvent", () => {
+					setAttributes(copy, attrObj);
+					animate.remove();
+				});
+				return animate;
+			});
+
+			if (animations.length) {
+				mutations.push(() => {
+					if (newID) copy.setAttribute("lambda-id", newID.str);
+					copy.append(...animations);
+					if (copy !== mainEl) mainEl.parentNode!.appendChild(copy);
+				});
+			}
+		}
+	}
+	transitionSVG(before: SVGElement, after: SVGElement, replaced: Replacer) {
+		const mutations: (() => void)[] = [];
+		const children = Array.from(before.children) as SVGElement[];
+
+		const changes: [Term, Term[]][] = [];
+		this.matchNodes(replaced.by!, replaced.at, changes);
+		console.log(changes);
+
+		// Update container size
+		this.animateAttributes(
+			mutations,
+			before,
+			[[after]],
+			["viewBox", "width", "height"]
+		);
+
+		// Update reduced terms
+		for (const [main, sides] of changes) {
+			const mainEl = before.querySelector<SVGElement>(
+				`[lambda-id="${main.id.str}"]`
+			)!;
+			if (sides.length > 0) {
+				this.animateAttributes(
+					mutations,
+					mainEl,
+					sides.map((s) => [
+						after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
+						s.id,
+					]),
+					["x1", "x2", "y1", "y2"]
+				);
+			} else {
+				// Argument not present after reducing, ex. (@x.a)b -> a
+				mutations.push(() => {
+					mainEl.setAttribute("stroke", "transparent");
+					mainEl.addEventListener("transitionend", () => mainEl.remove());
+				});
+			}
+		}
+
+		// Update shuffled or deleted terms
+		for (const child of children) {
+			const id = child.getAttribute("lambda-id");
+
+			const match = after.querySelector<SVGElement>(`[lambda-id="${id}"]`);
+
+			if (match)
+				this.animateAttributes(
+					mutations,
+					child,
+					[[match]],
+					["x1", "x2", "y1", "y2"]
+				);
+			else if (!changes.find(([a]) => a.id.str === id)) {
+				mutations.push(() => {
+					child.setAttribute("stroke", "transparent");
+					child.addEventListener("transitionend", () => child.remove());
+				});
+			}
+		}
 
 		mutations.forEach((cb) => cb());
 	}

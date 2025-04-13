@@ -1,5 +1,7 @@
 import { getID, ID } from "./utils.js";
 
+const id = getID();
+
 export interface Abstraction {
 	type: "ABSTRACTION";
 	param: symbol;
@@ -18,6 +20,10 @@ export interface Variable {
 	id: ID;
 }
 export type Term = Application | Abstraction | Variable;
+export interface Replacer {
+	by?: Term;
+	at: Term[];
+}
 
 const REDUCTION_STEP_LIMIT = 10000;
 export class SyntaxTree {
@@ -29,12 +35,16 @@ export class SyntaxTree {
 	betaReduce(attemptNominal = false) {
 		let reduced: Term | null;
 		let steps = REDUCTION_STEP_LIMIT;
+		const replaced: Replacer = { at: [] };
+
 		do {
 			reduced = attemptNominal
 				? this._greedyReductionStep(this._tree)
-				: this._shallowReductionStep(this._tree);
+				: this._shallowReductionStep(this._tree, replaced);
 			if (reduced) this._tree = reduced;
 		} while (attemptNominal && reduced && --steps > 0);
+
+		return replaced;
 	}
 
 	/** Performs as much reduction as possible in a single step */
@@ -74,17 +84,18 @@ export class SyntaxTree {
 	}
 
 	/** Perform one step of beta reduction */
-	_shallowReductionStep(tree: Term): Term | null {
+	_shallowReductionStep(tree: Term, replaced: Replacer): Term | null {
 		switch (tree.type) {
 			case "APPLICATION":
 				// Reduce application
 				const { left, right } = tree;
 
 				if (left.type === "ABSTRACTION") {
-					return this._substitute(left.body, left.param, right);
+					replaced.by = right;
+					return this._substitute(left.body, left.param, right, replaced);
 				}
 
-				const leftReduct = this._shallowReductionStep(left);
+				const leftReduct = this._shallowReductionStep(left, replaced);
 				if (leftReduct) {
 					return {
 						id: tree.id,
@@ -94,7 +105,7 @@ export class SyntaxTree {
 					};
 				}
 
-				const rightReduct = this._shallowReductionStep(right);
+				const rightReduct = this._shallowReductionStep(right, replaced);
 				if (rightReduct) {
 					return {
 						id: tree.id,
@@ -107,7 +118,7 @@ export class SyntaxTree {
 
 			case "ABSTRACTION":
 				// Reduce abstraction body
-				const bodyReduct = this._greedyReductionStep(tree.body);
+				const bodyReduct = this._shallowReductionStep(tree.body, replaced);
 				if (bodyReduct) {
 					return {
 						id: tree.id,
@@ -121,10 +132,14 @@ export class SyntaxTree {
 		return null;
 	}
 
-	_substitute(tree: Term, from: symbol, to: Term): Term {
+	_substitute(tree: Term, from: symbol, to: Term, replaced?: Replacer): Term {
 		// Quick escape for strings
 		if (tree.type === "VARIABLE") {
-			if (tree.symbol === from) return this._copy(to);
+			if (tree.symbol === from) {
+				const copy = this._copy(to);
+				replaced?.at!.push(copy);
+				return copy;
+			}
 			return tree;
 		}
 
@@ -136,8 +151,8 @@ export class SyntaxTree {
 			sub = {
 				id: tree.id,
 				type: "APPLICATION",
-				left: this._substitute(left, from, to),
-				right: this._substitute(right, from, to),
+				left: this._substitute(left, from, to, replaced),
+				right: this._substitute(right, from, to, replaced),
 			};
 		} else if (tree.param !== from) {
 			// Dealing with abstraction
@@ -145,7 +160,7 @@ export class SyntaxTree {
 				id: tree.id,
 				type: "ABSTRACTION",
 				param: tree.param,
-				body: this._substitute(tree.body, from, to),
+				body: this._substitute(tree.body, from, to, replaced),
 			};
 		} else {
 			// Is abstraction, but shadows the term that we are trying to substitute
@@ -159,20 +174,20 @@ export class SyntaxTree {
 		switch (tree.type) {
 			case "VARIABLE":
 				return {
-					id: tree.id,
+					id: id.next().value,
 					type: "VARIABLE",
 					symbol: tree.symbol,
 				};
 			case "APPLICATION":
 				return {
-					id: tree.id,
+					id: id.next().value,
 					type: "APPLICATION",
 					left: this._copy(tree.left),
 					right: this._copy(tree.right),
 				};
 			case "ABSTRACTION":
 				return {
-					id: tree.id,
+					id: id.next().value,
 					type: "ABSTRACTION",
 					param: tree.param,
 					body: this._copy(tree.body),
@@ -188,8 +203,7 @@ export class SyntaxTree {
 export const func_char = "@";
 export function parseString(
 	code: string,
-	mapping = new Map<string, symbol>(),
-	id = getID()
+	mapping = new Map<string, symbol>()
 ): Term {
 	let left: Term | null = null;
 	let right: Term | null = null;
@@ -207,7 +221,7 @@ export function parseString(
 			localMapping.set(paramChar, param);
 
 			// All characters at this point must be consumed
-			const body = parseString(code.slice(start, end), localMapping, id);
+			const body = parseString(code.slice(start, end), localMapping);
 			const abstraction: Abstraction = {
 				type: "ABSTRACTION",
 				param,
@@ -224,7 +238,7 @@ export function parseString(
 			const start = i + 1;
 			const end = findBracketPair(code, i);
 
-			let term = parseString(code.slice(start, end), mapping, id);
+			let term = parseString(code.slice(start, end), mapping);
 			if (!left) left = term;
 			else right = term;
 

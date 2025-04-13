@@ -9,7 +9,10 @@ const AND = "@f.@g.fgf";
 
 const syntaxTree = new SyntaxTree(
 	// "(@x.xx)(@x.x)"
+	// code`${NOT}(${OR}${FALSE}${TRUE})`
+	// code`${NOT}${OR}`
 	code`${OR}${FALSE}${TRUE}`
+	// code`(@x.x)(${TRUE}${TRUE})`
 	// OR
 	// "@f.@x.f(fx)"
 	// code`${NOT}(${AND}${TRUE}${FALSE})`
@@ -18,11 +21,12 @@ const syntaxTree = new SyntaxTree(
 
 const tromp = new Tromp(syntaxTree, 5);
 document.body.appendChild(tromp.svg);
+console.log(syntaxTree._tree);
 
 document.body.addEventListener("click", () => {
-	syntaxTree.betaReduce();
+	const replaced = syntaxTree.betaReduce();
 	tromp._DiagramTree = tromp.construct();
-	const next = tromp.render();
-	tromp.animate(tromp.svg, next);
+	const next = tromp.buildPath();
+	tromp.transitionSVG(tromp.svg, next, replaced);
 	document.body.appendChild(next);
 });
