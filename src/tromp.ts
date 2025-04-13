@@ -470,9 +470,9 @@ export class Tromp {
 			const copy = isFirst ? mainEl : (mainEl.cloneNode() as SVGElement);
 			isFirst = false;
 
-			const attrObj: Record<string, any> = {};
+			const attrObj: Record<string, string> = {};
 			const animations = attributes.flatMap((attr) => {
-				const newValue = sideEl.getAttribute(attr);
+				const newValue = sideEl.getAttribute(attr) ?? "";
 				if (newValue === oldValues.get(attr)) return [];
 				attrObj[attr] = newValue;
 
