@@ -195,8 +195,8 @@ export class SyntaxTree {
 		}
 	}
 
-	toString() {
-		return stringifyTree(this._tree);
+	toString(collectParameters = false) {
+		return stringifyTree(this._tree, collectParameters);
 	}
 }
 
@@ -268,7 +268,7 @@ export function parseString(
 	if (!left) throw "Cannot parse empty string";
 	return left;
 }
-export function stringifyTree(tree: Term): string {
+export function stringifyTree(tree: Term, combineParameters = false): string {
 	let str = "";
 	if (tree.type === "VARIABLE") {
 		// Is this a dangerous assumption?
@@ -277,15 +277,22 @@ export function stringifyTree(tree: Term): string {
 		// Dealing with application
 		const { left, right } = tree;
 
-		str += stringifyTree(left);
+		str += stringifyTree(left, combineParameters);
 
 		// If the second term is an application itself, then explicitly parenthesize
-		if (right.type === "APPLICATION") str += `(${stringifyTree(right)})`;
-		else str += `${stringifyTree(right)}`;
+		if (right.type === "APPLICATION")
+			str += `(${stringifyTree(right, combineParameters)})`;
+		else str += `${stringifyTree(right, combineParameters)}`;
 	} else {
 		// Dealing with abstraction
-		const body = stringifyTree(tree.body);
-		str = `(${func_char}${tree.param.description}.${body})`;
+		// Shorthand: Collect parameters of consecutively nested abstractions
+		let node: Term = tree.body;
+		let parameters = tree.param.description!;
+		while (combineParameters && node.type === "ABSTRACTION") {
+			parameters += node.param.description;
+			node = node.body;
+		}
+		str = `(${func_char}${parameters}.${stringifyTree(node, combineParameters)})`;
 	}
 	return str;
 }
