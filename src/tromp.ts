@@ -1,10 +1,4 @@
-import {
-	Application,
-	Replacer,
-	SyntaxTree,
-	type Abstraction,
-	type Term,
-} from "./lambda.js";
+import { Replacer, SyntaxTree, type Term } from "./lambda.js";
 import { createSVG, ID, setAttributes } from "./utils.js";
 
 const startTime = Date.now();
@@ -25,7 +19,7 @@ interface DiagramAbstraction {
 	x2?: number;
 	y1?: number;
 	y2?: number;
-	paramLines?: Map<symbol, Parameter>;
+	paramLines?: [symbol, Parameter][];
 }
 interface DiagramApplication {
 	type: "APPLICATION";
@@ -103,7 +97,7 @@ function findRelevantAbstraction(node: DiagramTerm, sym: symbol) {
 
 	while (current) {
 		if (current.type === "ABSTRACTION") {
-			if (current.paramLines?.has(sym)) {
+			if (current.paramLines?.find(([s]) => s === sym)) {
 				binding = current;
 				break; // Stop once we find the binding abstraction
 			}
@@ -161,13 +155,11 @@ function computeHeights(t: DiagramTerm, y = 0) {
 	switch (t.type) {
 		case "ABSTRACTION":
 			t.y1 = y;
-			t.paramLines = new Map(
-				t.parameters.map(([p, id]) => {
-					const lineY = y + style.linewidth / 2;
-					y += style.paramLineGap;
-					return [p, { symbol: p, y: lineY, id }];
-				})
-			);
+			t.paramLines = t.parameters.map(([p, id]) => {
+				const lineY = y + style.linewidth / 2;
+				y += style.paramLineGap;
+				return [p, { symbol: p, y: lineY, id }];
+			});
 
 			computeHeights(t.body, y);
 
@@ -187,7 +179,7 @@ function computeHeights(t: DiagramTerm, y = 0) {
 
 		case "VARIABLE":
 			const binding = findRelevantAbstraction(t, t.symbol);
-			const line = binding?.paramLines?.get(t.symbol);
+			const [, line] = binding?.paramLines?.find(([s]) => s === t.symbol)!;
 			t.y1 = line?.y ?? y + style.applicationRowGap / 2;
 			t.y2 = y + style.applicationRowGap;
 			break;
@@ -290,7 +282,7 @@ export class Tromp {
 		(function draw(node: DiagramTerm, svg = elem, ox = 0, oy = 0) {
 			switch (node.type) {
 				case "ABSTRACTION":
-					const [subheight, subwidth] = getTreeSize(node);
+					// const [subheight, subwidth] = getTreeSize(node);
 					const newOx = node.x1! - ox;
 					const newOy = node.y1! - oy;
 
@@ -352,7 +344,6 @@ export class Tromp {
 					break;
 
 				case "VARIABLE":
-					// t: node.symbol,
 					const variableLine = createSVG("line", {
 						"lambda-id": node.id.str,
 						"lambda-type": "VARIABLE",
@@ -427,7 +418,13 @@ export class Tromp {
 
 		return container;
 	}
-	matchNodes(main: Term, sides: Term[], matches: [Term, Term[]][]) {
+	matchNodes(
+		main: Term,
+		sides: Term[],
+		matches: [Term, Term[]][],
+		b: SVGElement,
+		a: SVGElement
+	) {
 		matches.push([main, sides]);
 		switch (main.type) {
 			case "ABSTRACTION":
@@ -437,19 +434,22 @@ export class Tromp {
 						if (s.type !== main.type) throw Error("Side tree does not match");
 						return s.body;
 					}),
-					matches
+					matches,
+					b,
+					a
 				);
 				break;
 			case "APPLICATION":
-				const branches: ("left" | "right")[] = ["left", "right"];
-				for (const branch of branches) {
+				for (const branch of ["left", "right"] as const) {
 					this.matchNodes(
 						main[branch],
 						sides.map((s) => {
 							if (s.type !== "APPLICATION") throw Error("Side tree does not match");
 							return s[branch];
 						}),
-						matches
+						matches,
+						b,
+						a
 					);
 				}
 		}
@@ -467,6 +467,8 @@ export class Tromp {
 		let isFirst = true;
 		const begin = `${Date.now() - startTime}ms`;
 		for (const [sideEl, newID] of sideEls) {
+			if (!mainEl || !sideEl) console.log(mainEl, sideEl);
+
 			const copy = isFirst ? mainEl : (mainEl.cloneNode() as SVGElement);
 			isFirst = false;
 
@@ -505,8 +507,8 @@ export class Tromp {
 		const children = Array.from(before.children) as SVGElement[];
 
 		const changes: [Term, Term[]][] = [];
-		this.matchNodes(replaced.by!, replaced.at, changes);
-		console.log(changes);
+		this.matchNodes(replaced.by!, replaced.at, changes, before, after);
+		// console.log(changes);
 
 		// Update container size
 		this.animateAttributes(
@@ -517,33 +519,37 @@ export class Tromp {
 		);
 
 		// Update reduced terms
+		// console.log(changes, before);
 		for (const [main, sides] of changes) {
 			const mainEl = before.querySelector<SVGElement>(
 				`[lambda-id="${main.id.str}"]`
 			)!;
-			if (sides.length > 0) {
-				this.animateAttributes(
-					mutations,
-					mainEl,
-					sides.map((s) => [
-						after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
-						s.id,
-					]),
-					["x1", "x2", "y1", "y2"]
-				);
-			} else {
-				// Argument not present after reducing, ex. (@x.a)b -> a
-				mutations.push(() => {
-					mainEl.setAttribute("stroke", "transparent");
-					mainEl.addEventListener("transitionend", () => mainEl.remove());
-				});
+			try {
+				if (sides.length > 0) {
+					this.animateAttributes(
+						mutations,
+						mainEl,
+						sides.map((s) => [
+							after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
+							s.id,
+						]),
+						["x1", "x2", "y1", "y2"]
+					);
+				} else {
+					// Argument not present after reducing, ex. (@x.a)b -> a
+					mutations.push(() => {
+						mainEl.setAttribute("stroke", "transparent");
+						mainEl.addEventListener("transitionend", () => mainEl.remove());
+					});
+				}
+			} catch (err) {
+				throw err;
 			}
 		}
 
 		// Update shuffled or deleted terms
 		for (const child of children) {
 			const id = child.getAttribute("lambda-id");
-
 			const match = after.querySelector<SVGElement>(`[lambda-id="${id}"]`);
 
 			if (match)
