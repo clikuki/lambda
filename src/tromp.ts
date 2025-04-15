@@ -179,8 +179,8 @@ function computeHeights(t: DiagramTerm, y = 0) {
 
 		case "VARIABLE":
 			const binding = findRelevantAbstraction(t, t.symbol);
-			const [, line] = binding?.paramLines?.find(([s]) => s === t.symbol)!;
-			t.y1 = line?.y ?? y + style.applicationRowGap / 2;
+			const symLinePair = binding?.paramLines?.find(([s]) => s === t.symbol);
+			t.y1 = symLinePair?.[1].y ?? y + style.applicationRowGap / 2;
 			t.y2 = y + style.applicationRowGap;
 			break;
 	}
@@ -215,7 +215,7 @@ function computeWidths(t: DiagramTerm, x = 0) {
 			t.x2 = findExtremeTerm(t.right, "LEFT").x! + style.linewidth / 2;
 			break;
 		case "VARIABLE":
-			t.x = x;
+			t.x = x + style.linewidth / 2;
 			break;
 	}
 }
@@ -240,7 +240,7 @@ function getTreeSize(tree: DiagramTerm): [number, number] {
 					break;
 
 				case "VARIABLE":
-					width = current.x!;
+					width = current.x! + style.linewidth / 2;
 					current = null;
 					break;
 			}
@@ -300,8 +300,6 @@ function animateAttributes(
 	let isFirst = true;
 	const begin = `${Date.now() - startTime}ms`;
 	for (const [sideEl, newID] of sideEls) {
-		if (!mainEl || !sideEl) console.log(mainEl, sideEl);
-
 		const copy = isFirst ? mainEl : (mainEl.cloneNode() as SVGElement);
 		isFirst = false;
 
@@ -326,13 +324,11 @@ function animateAttributes(
 			return animate;
 		});
 
-		if (animations.length) {
-			mutations.push(() => {
-				if (newID) copy.setAttribute("lambda-id", newID.str);
-				copy.append(...animations);
-				if (copy !== mainEl) mainEl.parentNode!.appendChild(copy);
-			});
-		}
+		mutations.push(() => {
+			if (newID) copy.setAttribute("lambda-id", newID.str);
+			copy.append(...animations);
+			if (copy !== mainEl) mainEl.parentNode!.appendChild(copy);
+		});
 	}
 }
 
@@ -477,10 +473,13 @@ export class Tromp {
 	reduce() {
 		const replaced = this.lambdaTree.betaReduce();
 		if (!replaced.by) return false;
+		// console.log(replaced);
 
 		const diagramTree = this.construct();
 		const nextSVG = buildPath(diagramTree, this.scale);
 		transitionSVG(this.svg, nextSVG, replaced);
+		// this.svg.replaceWith(nextSVG);
+		// this.svg = nextSVG;
 		return true;
 	}
 }

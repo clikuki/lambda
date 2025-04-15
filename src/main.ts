@@ -30,27 +30,28 @@ const syntaxTree = new SyntaxTree(
 	// code`${ADD}${getNumeral(4)}${getNumeral(3)}`
 	// code`${getNumeral(4)}${SUCC}${getNumeral(3)}`
 	// code`${MULT}${getNumeral(4)}${getNumeral(3)}`
-	// code`${EXP}${getNumeral(3)}${getNumeral(5)}`
+	// code`${EXP}${getNumeral(5)}${getNumeral(4)}`
 	// code`${PRED}${getNumeral(5)}`
-	code`${SUB}${getNumeral(20)}${getNumeral(20)}`
+	// code`${SUB}${getNumeral(20)}${getNumeral(20)}`
 
 	// code`${OR}(${NOT}(${OR}${FALSE}${TRUE}))(${AND}${TRUE}${TRUE})`
+	"(@x.xx)(@x.xx)"
 );
 
 const tromp = new Tromp(syntaxTree, 1);
 document.body.appendChild(tromp.svg);
-console.log(syntaxTree.toString());
+// console.log(syntaxTree.toString());
 
 let reductionBuffer = 0;
-document.body.addEventListener("click", () => {
-	reductionBuffer++;
+document.body.addEventListener("click", () => reductionBuffer++);
 
-	(function loop() {
-		if (tromp.svg.querySelector("animate")) {
-			requestAnimationFrame(loop);
-			return;
-		}
+(function loop() {
+	requestAnimationFrame(loop);
 
-		if (tromp.reduce() && --reductionBuffer) requestAnimationFrame(loop);
-	})();
-});
+	if (tromp.svg.querySelector("animate")) return;
+
+	if (reductionBuffer > 0) {
+		reductionBuffer--;
+		tromp.reduce();
+	}
+})();
