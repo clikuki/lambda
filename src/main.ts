@@ -32,7 +32,7 @@ const syntaxTree = new SyntaxTree(
 	// code`${MULT}${getNumeral(4)}${getNumeral(3)}`
 	// code`${EXP}${getNumeral(3)}${getNumeral(5)}`
 	// code`${PRED}${getNumeral(5)}`
-	code`${SUB}${getNumeral(3)}${getNumeral(2)}`
+	code`${SUB}${getNumeral(20)}${getNumeral(20)}`
 
 	// code`${OR}(${NOT}(${OR}${FALSE}${TRUE}))(${AND}${TRUE}${TRUE})`
 );
@@ -41,24 +41,16 @@ const tromp = new Tromp(syntaxTree, 1);
 document.body.appendChild(tromp.svg);
 console.log(syntaxTree.toString());
 
-let queued = 0;
+let reductionBuffer = 0;
 document.body.addEventListener("click", () => {
-	queued++;
+	reductionBuffer++;
 
 	(function loop() {
 		if (tromp.svg.querySelector("animate")) {
 			requestAnimationFrame(loop);
 			return;
 		}
-		const replaced = syntaxTree.betaReduce();
-		if (!replaced.by) return;
 
-		console.log(syntaxTree.toString());
-
-		tromp._DiagramTree = tromp.construct();
-		const next = tromp.buildPath();
-		tromp.transitionSVG(tromp.svg, next, replaced);
-		// document.body.append(next);
-		if (--queued) requestAnimationFrame(loop);
+		if (tromp.reduce() && --reductionBuffer) requestAnimationFrame(loop);
 	})();
 });

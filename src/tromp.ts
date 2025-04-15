@@ -44,6 +44,14 @@ interface DiagramVariable {
 }
 type DiagramTerm = DiagramAbstraction | DiagramApplication | DiagramVariable;
 
+const style = {
+	linewidth: 2,
+	paramLineGap: 6,
+	applicationRowGap: 10,
+	applicationColGap: 10,
+	pad: 2,
+};
+
 function rebuildTree(tree: Term): DiagramTerm {
 	if (tree.type === "VARIABLE")
 		return {
@@ -82,14 +90,6 @@ function rebuildTree(tree: Term): DiagramTerm {
 		return node;
 	}
 }
-
-const style = {
-	linewidth: 2,
-	paramLineGap: 6,
-	applicationRowGap: 10,
-	applicationColGap: 10,
-	pad: 2,
-};
 
 function findRelevantAbstraction(node: DiagramTerm, sym: symbol) {
 	let binding: DiagramAbstraction | null = null;
@@ -250,323 +250,237 @@ function getTreeSize(tree: DiagramTerm): [number, number] {
 	return [height, width];
 }
 
-export class Tromp {
-	svg: SVGElement;
-	_lambdaTree: SyntaxTree;
-	_DiagramTree: DiagramTerm;
-	_varMap: Map<SVGElement, symbol>;
-	constructor(tree: SyntaxTree, public _scale = 1) {
-		this._lambdaTree = tree;
-		this._DiagramTree = this.construct();
-		// this.svg = this.render();
-		this.svg = this.buildPath();
-	}
-	construct() {
-		const diagramTree = rebuildTree(this._lambdaTree._tree);
-		computeHeights(diagramTree);
-		computeWidths(diagramTree);
-		return diagramTree;
-	}
-	render() {
-		const [height, width] = getTreeSize(this._DiagramTree);
-
-		const elem = createSVG("svg", {
-			viewBox: `0 0 ${width} ${height}`,
-			stroke: "black",
-			width: width * this._scale,
-			height: height * this._scale,
-			"stroke-width": style.linewidth,
-			"stroke-linecap": "butt",
-		});
-
-		(function draw(node: DiagramTerm, svg = elem, ox = 0, oy = 0) {
-			switch (node.type) {
-				case "ABSTRACTION":
-					// const [subheight, subwidth] = getTreeSize(node);
-					const newOx = node.x1! - ox;
-					const newOy = node.y1! - oy;
-
-					// console.trace({
-					// 	// Node size
-					// 	nodeWidth: node.x2! - node.x1!,
-					// 	nodeHeight: node.y2! - node.y1!,
-					// 	// Tree size
-					// 	treeWidth: getTreeSize(node)[1],
-					// 	treeHeight: getTreeSize(node)[0],
-					// });
-
-					const absSvg = createSVG("svg", {
-						"lambda-id": node.id.str,
-						"lambda-type": "ABSTRACTION",
-						viewBox: `0 0 ${width} ${height}`,
-						x: newOx,
-						y: newOy,
-						width: width,
-						height: height,
-						stroke: "black",
-						"stroke-width": style.linewidth,
-						"stroke-linecap": "butt",
-					});
-
-					for (const [sym, line] of node.paramLines!) {
-						// svg.appendChild(
-						absSvg.appendChild(
-							createSVG("line", {
-								"lambda-id": line.id.str,
-								"lambda-var": sym.description,
-								"lambda-type": "PARAMETER",
-								x1: node.x1! - newOx,
-								x2: node.x2! - newOx,
-								y1: line.y - newOy,
-								y2: line.y - newOy,
-							})
-						);
-					}
-
-					// draw(node.body, svg, newOx, newOy);
-					draw(node.body, absSvg, newOx, newOy);
-					svg.appendChild(absSvg);
-					break;
-
-				case "APPLICATION":
-					const applicationLine = createSVG("line", {
-						"lambda-id": node.id.str,
-						"lambda-type": "APPLICATION",
-						x1: node.x1! - ox,
-						x2: node.x2! - ox,
-						y1: node.y! - oy,
-						y2: node.y! - oy,
-					});
-					svg.appendChild(applicationLine);
-
-					draw(node.left, svg, ox, oy);
-					draw(node.right, svg, ox, oy);
-					break;
-
-				case "VARIABLE":
-					const variableLine = createSVG("line", {
-						"lambda-id": node.id.str,
-						"lambda-type": "VARIABLE",
-						x1: node.x! - ox,
-						x2: node.x! - ox,
-						y1: node.y1! - oy,
-						y2: node.y2! - oy,
-					});
-					svg.appendChild(variableLine);
-					break;
-			}
-		})(this._DiagramTree);
-
-		return elem;
-	}
-	buildPath(): SVGElement {
-		const [height, width] = getTreeSize(this._DiagramTree);
-		const container = createSVG("svg", {
-			viewBox: `0 0 ${width} ${height}`,
-			stroke: "black",
-			width: width * this._scale,
-			height: height * this._scale,
-			"stroke-width": style.linewidth,
-			"stroke-linecap": "butt",
-		});
-
-		(function draw(node: DiagramTerm) {
-			switch (node.type) {
-				case "ABSTRACTION":
-					for (const [, line] of node.paramLines!) {
-						container.appendChild(
-							createSVG("line", {
-								"lambda-id": line.id.str,
-								x1: node.x1,
-								y1: line.y,
-								x2: node.x2,
-								y2: line.y,
-							})
-						);
-					}
-
-					draw(node.body);
-					break;
-
-				case "APPLICATION":
-					container.appendChild(
-						createSVG("line", {
-							"lambda-id": node.id.str,
-							x1: node.x1,
-							y1: node.y,
-							x2: node.x2,
-							y2: node.y,
-						})
-					);
-					draw(node.left);
-					draw(node.right);
-					break;
-
-				case "VARIABLE":
-					container.appendChild(
-						createSVG("line", {
-							"lambda-id": node.id.str,
-							x1: node.x,
-							y1: node.y1,
-							x2: node.x,
-							y2: node.y2,
-						})
-					);
-					break;
-			}
-		})(this._DiagramTree);
-
-		return container;
-	}
-	matchNodes(
-		main: Term,
-		sides: Term[],
-		matches: [Term, Term[]][],
-		b: SVGElement,
-		a: SVGElement
-	) {
-		matches.push([main, sides]);
-		switch (main.type) {
-			case "ABSTRACTION":
-				this.matchNodes(
-					main.body,
+function matchNodes(
+	main: Term,
+	sides: Term[],
+	matches: [Term, Term[]][],
+	b: SVGElement,
+	a: SVGElement
+) {
+	matches.push([main, sides]);
+	switch (main.type) {
+		case "ABSTRACTION":
+			matchNodes(
+				main.body,
+				sides.map((s) => {
+					if (s.type !== main.type) throw Error("Side tree does not match");
+					return s.body;
+				}),
+				matches,
+				b,
+				a
+			);
+			break;
+		case "APPLICATION":
+			for (const branch of ["left", "right"] as const) {
+				matchNodes(
+					main[branch],
 					sides.map((s) => {
-						if (s.type !== main.type) throw Error("Side tree does not match");
-						return s.body;
+						if (s.type !== "APPLICATION") throw Error("Side tree does not match");
+						return s[branch];
 					}),
 					matches,
 					b,
 					a
 				);
-				break;
-			case "APPLICATION":
-				for (const branch of ["left", "right"] as const) {
-					this.matchNodes(
-						main[branch],
-						sides.map((s) => {
-							if (s.type !== "APPLICATION") throw Error("Side tree does not match");
-							return s[branch];
-						}),
-						matches,
-						b,
-						a
-					);
-				}
-		}
+			}
 	}
-	animateAttributes(
-		mutations: (() => void)[],
-		mainEl: SVGElement,
-		sideEls: [SVGElement, ID?][],
-		attributes: string[]
-	) {
-		const oldValues = new Map(
-			attributes.map((attr) => [attr, mainEl.getAttribute(attr)!])
-		);
+}
 
-		let isFirst = true;
-		const begin = `${Date.now() - startTime}ms`;
-		for (const [sideEl, newID] of sideEls) {
-			if (!mainEl || !sideEl) console.log(mainEl, sideEl);
+function animateAttributes(
+	mutations: (() => void)[],
+	mainEl: SVGElement,
+	sideEls: [SVGElement, ID?][],
+	attributes: string[]
+) {
+	const oldValues = new Map(
+		attributes.map((attr) => [attr, mainEl.getAttribute(attr)!])
+	);
 
-			const copy = isFirst ? mainEl : (mainEl.cloneNode() as SVGElement);
-			isFirst = false;
+	let isFirst = true;
+	const begin = `${Date.now() - startTime}ms`;
+	for (const [sideEl, newID] of sideEls) {
+		if (!mainEl || !sideEl) console.log(mainEl, sideEl);
 
-			const attrObj: Record<string, string> = {};
-			const animations = attributes.flatMap((attr) => {
-				const newValue = sideEl.getAttribute(attr) ?? "";
-				if (newValue === oldValues.get(attr)) return [];
-				attrObj[attr] = newValue;
+		const copy = isFirst ? mainEl : (mainEl.cloneNode() as SVGElement);
+		isFirst = false;
 
-				const animate = createSVG("animate", {
-					attributeName: attr,
-					to: newValue,
-					dur: ".3s",
-					begin,
-					fill: "freeze",
-				});
+		const attrObj: Record<string, string> = {};
+		const animations = attributes.flatMap((attr) => {
+			const newValue = sideEl.getAttribute(attr) ?? "";
+			if (newValue === oldValues.get(attr)) return [];
+			attrObj[attr] = newValue;
 
-				animate.addEventListener("endEvent", () => {
-					setAttributes(copy, attrObj);
-					animate.remove();
-				});
-				return animate;
+			const animate = createSVG("animate", {
+				attributeName: attr,
+				to: newValue,
+				dur: ".3s",
+				begin,
+				fill: "freeze",
 			});
 
-			if (animations.length) {
-				mutations.push(() => {
-					if (newID) copy.setAttribute("lambda-id", newID.str);
-					copy.append(...animations);
-					if (copy !== mainEl) mainEl.parentNode!.appendChild(copy);
-				});
-			}
+			animate.addEventListener("endEvent", () => {
+				setAttributes(copy, attrObj);
+				animate.remove();
+			});
+			return animate;
+		});
+
+		if (animations.length) {
+			mutations.push(() => {
+				if (newID) copy.setAttribute("lambda-id", newID.str);
+				copy.append(...animations);
+				if (copy !== mainEl) mainEl.parentNode!.appendChild(copy);
+			});
 		}
 	}
-	transitionSVG(before: SVGElement, after: SVGElement, replaced: Replacer) {
-		const mutations: (() => void)[] = [];
-		const children = Array.from(before.children) as SVGElement[];
+}
 
-		const changes: [Term, Term[]][] = [];
-		this.matchNodes(replaced.by!, replaced.at, changes, before, after);
-		// console.log(changes);
+function buildPath(tree: DiagramTerm, scale: number): SVGElement {
+	const [height, width] = getTreeSize(tree);
+	const container = createSVG("svg", {
+		viewBox: `0 0 ${width} ${height}`,
+		stroke: "black",
+		width: width * scale,
+		height: height * scale,
+		"stroke-width": style.linewidth,
+		"stroke-linecap": "butt",
+	});
 
-		// Update container size
-		this.animateAttributes(
-			mutations,
-			before,
-			[[after]],
-			["viewBox", "width", "height"]
-		);
-
-		// Update reduced terms
-		// console.log(changes, before);
-		for (const [main, sides] of changes) {
-			const mainEl = before.querySelector<SVGElement>(
-				`[lambda-id="${main.id.str}"]`
-			)!;
-			try {
-				if (sides.length > 0) {
-					this.animateAttributes(
-						mutations,
-						mainEl,
-						sides.map((s) => [
-							after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
-							s.id,
-						]),
-						["x1", "x2", "y1", "y2"]
+	(function draw(node: DiagramTerm) {
+		switch (node.type) {
+			case "ABSTRACTION":
+				for (const [, line] of node.paramLines!) {
+					container.appendChild(
+						createSVG("line", {
+							"lambda-id": line.id.str,
+							x1: node.x1,
+							y1: line.y,
+							x2: node.x2,
+							y2: line.y,
+						})
 					);
-				} else {
-					// Argument not present after reducing, ex. (@x.a)b -> a
-					mutations.push(() => {
-						mainEl.setAttribute("stroke", "transparent");
-						mainEl.addEventListener("transitionend", () => mainEl.remove());
-					});
 				}
-			} catch (err) {
-				throw err;
-			}
+
+				draw(node.body);
+				break;
+
+			case "APPLICATION":
+				container.appendChild(
+					createSVG("line", {
+						"lambda-id": node.id.str,
+						x1: node.x1,
+						y1: node.y,
+						x2: node.x2,
+						y2: node.y,
+					})
+				);
+				draw(node.left);
+				draw(node.right);
+				break;
+
+			case "VARIABLE":
+				container.appendChild(
+					createSVG("line", {
+						"lambda-id": node.id.str,
+						x1: node.x,
+						y1: node.y1,
+						x2: node.x,
+						y2: node.y2,
+					})
+				);
+				break;
 		}
+	})(tree);
 
-		// Update shuffled or deleted terms
-		for (const child of children) {
-			const id = child.getAttribute("lambda-id");
-			const match = after.querySelector<SVGElement>(`[lambda-id="${id}"]`);
+	return container;
+}
 
-			if (match)
-				this.animateAttributes(
+function transitionSVG(
+	before: SVGElement,
+	after: SVGElement,
+	replaced: Replacer
+) {
+	const mutations: (() => void)[] = [];
+	const children = Array.from(before.children) as SVGElement[];
+
+	const changes: [Term, Term[]][] = [];
+	matchNodes(replaced.by!, replaced.at, changes, before, after);
+
+	// Update container size
+	animateAttributes(
+		mutations,
+		before,
+		[[after]],
+		["viewBox", "width", "height"]
+	);
+
+	// Update reduced terms
+	// console.log(changes, before);
+	for (const [main, sides] of changes) {
+		const mainEl = before.querySelector<SVGElement>(
+			`[lambda-id="${main.id.str}"]`
+		)!;
+		try {
+			if (sides.length > 0) {
+				animateAttributes(
 					mutations,
-					child,
-					[[match]],
+					mainEl,
+					sides.map((s) => [
+						after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
+						s.id,
+					]),
 					["x1", "x2", "y1", "y2"]
 				);
-			else if (!changes.find(([a]) => a.id.str === id)) {
+			} else {
+				// Argument not present after reducing, ex. (@x.a)b -> a
 				mutations.push(() => {
-					child.setAttribute("stroke", "transparent");
-					child.addEventListener("transitionend", () => child.remove());
+					mainEl.setAttribute("stroke", "transparent");
+					mainEl.addEventListener("transitionend", () => mainEl.remove());
 				});
 			}
+		} catch (err) {
+			throw err;
 		}
+	}
 
-		mutations.forEach((cb) => cb());
+	// Update shuffled or deleted terms
+	for (const child of children) {
+		const id = child.getAttribute("lambda-id");
+		const match = after.querySelector<SVGElement>(`[lambda-id="${id}"]`);
+
+		if (match)
+			animateAttributes(mutations, child, [[match]], ["x1", "x2", "y1", "y2"]);
+		else if (!changes.find(([a]) => a.id.str === id)) {
+			mutations.push(() => {
+				child.setAttribute("stroke", "transparent");
+				child.addEventListener("transitionend", () => child.remove());
+			});
+		}
+	}
+
+	mutations.forEach((cb) => cb());
+}
+
+export class Tromp {
+	svg: SVGElement;
+	constructor(private lambdaTree: SyntaxTree, public scale = 1) {
+		const diagramTree = this.construct();
+		this.svg = buildPath(diagramTree, scale);
+	}
+	construct() {
+		const diagramTree = rebuildTree(this.lambdaTree._tree);
+		computeHeights(diagramTree);
+		computeWidths(diagramTree);
+		return diagramTree;
+	}
+	reduce() {
+		const replaced = this.lambdaTree.betaReduce();
+		if (!replaced.by) return false;
+
+		const diagramTree = this.construct();
+		const nextSVG = buildPath(diagramTree, this.scale);
+		transitionSVG(this.svg, nextSVG, replaced);
+		return true;
 	}
 }
