@@ -1,0 +1,12 @@
+<!-- @f.@x.fx -->
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" stroke="black" stroke-width="4" stroke-linecap="butt">
+	<line x1="0" x2="70" y1="2" y2="2"/>
+	<svg x="10" y="10" width="50" height="50" viewBox="0 0 50 50">
+		<line x1="0" x2="40" y1="2" y2="2"/>
+		<g>
+			<line x1="0" x2="40" y1="12" y2="12"/>
+			<path d="M 10 0 L 10 50 M 30 10 L 30 30 L 10 30" fill="none" stroke="red"/>
+		</g>
+	</svg>
+	<path d="M 60 0 L 60 50 L 20 50" fill="none"/>
+</svg>
