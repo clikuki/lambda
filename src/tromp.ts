@@ -345,13 +345,13 @@ function animateAttributes(
 	return oldAttr;
 }
 
-function buildPath(tree: DiagramTerm, scale: number): SVGElement {
+function buildPath(tree: DiagramTerm): SVGElement {
 	const [height, width] = getTreeSize(tree);
 	const container = createSVG("svg", {
 		viewBox: `0 0 ${width} ${height}`,
 		stroke: "black",
-		width: width * scale,
-		height: height * scale,
+		width: width,
+		height: height,
 		"stroke-width": style.linewidth,
 		"stroke-linecap": "butt",
 	});
@@ -511,10 +511,18 @@ export class Tromp {
 	svg: SVGElement;
 	lambdaTree: Lambda;
 	private undoStack: UndoData[] = [];
-	constructor(code: string, public scale = 1) {
+	constructor(code: string) {
 		this.lambdaTree = new Lambda(code);
 		const diagramTree = this.construct();
-		this.svg = buildPath(diagramTree, scale);
+		this.svg = buildPath(diagramTree);
+	}
+	use(code: string) {
+		this.lambdaTree = new Lambda(code);
+		const diagramTree = this.construct();
+		const newSVG = buildPath(diagramTree);
+
+		this.svg.replaceWith(newSVG);
+		this.svg = newSVG;
 	}
 	construct() {
 		const diagramTree = rebuildTree(this.lambdaTree.tree);
@@ -528,7 +536,7 @@ export class Tromp {
 		if (!replaced.by) return false;
 
 		const diagramTree = this.construct();
-		const nextSVG = buildPath(diagramTree, this.scale);
+		const nextSVG = buildPath(diagramTree);
 		this.undoStack.push({
 			...transitionSVG(this.svg, nextSVG, replaced),
 			prevLambdaTree: lambdaString,
