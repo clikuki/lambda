@@ -1,4 +1,4 @@
-import { Replacer, SyntaxTree, type Term } from "./lambda.js";
+import { Replacer, Lambda, type Term } from "./lambda.js";
 import { createSVG, ID, setAttributes } from "./utils.js";
 
 const startTime = Date.now();
@@ -43,6 +43,17 @@ interface DiagramVariable {
 	y2?: number;
 }
 type DiagramTerm = DiagramAbstraction | DiagramApplication | DiagramVariable;
+
+interface UndoData {
+	prevLambdaTree: Term;
+	transitions: Map<string, Record<string, string>>;
+	reduction: {
+		fromId: string;
+		fromAttr: Record<string, string>;
+		atIds: string[];
+	}[];
+	deleted: Record<string, string>[];
+}
 
 const style = {
 	linewidth: 2,
@@ -293,7 +304,7 @@ function animateAttributes(
 	sideEls: [SVGElement, ID?][],
 	attributes: string[]
 ) {
-	const oldValues = new Map(
+	const oldAttr = new Map(
 		attributes.map((attr) => [attr, mainEl.getAttribute(attr)!])
 	);
 
@@ -303,11 +314,11 @@ function animateAttributes(
 		const copy = isFirst ? mainEl : (mainEl.cloneNode() as SVGElement);
 		isFirst = false;
 
-		const attrObj: Record<string, string> = {};
+		const newAttr: Record<string, string> = {};
 		const animations = attributes.flatMap((attr) => {
 			const newValue = sideEl.getAttribute(attr) ?? "";
-			if (newValue === oldValues.get(attr)) return [];
-			attrObj[attr] = newValue;
+			if (newValue === oldAttr.get(attr)) return [];
+			newAttr[attr] = newValue;
 
 			const animate = createSVG("animate", {
 				attributeName: attr,
@@ -318,7 +329,7 @@ function animateAttributes(
 			});
 
 			animate.addEventListener("endEvent", () => {
-				setAttributes(copy, attrObj);
+				setAttributes(copy, newAttr);
 				animate.remove();
 			});
 			return animate;
@@ -330,6 +341,8 @@ function animateAttributes(
 			if (copy !== mainEl) mainEl.parentNode!.appendChild(copy);
 		});
 	}
+
+	return oldAttr;
 }
 
 function buildPath(tree: DiagramTerm, scale: number): SVGElement {
@@ -396,40 +409,62 @@ function transitionSVG(
 	before: SVGElement,
 	after: SVGElement,
 	replaced: Replacer
-) {
+): Omit<UndoData, "prevLambdaTree"> {
 	const mutations: (() => void)[] = [];
 	const children = Array.from(before.children) as SVGElement[];
+	const undoData: Omit<UndoData, "prevLambdaTree"> = {
+		transitions: new Map(),
+		reduction: [],
+		deleted: [],
+	};
 
 	const changes: [Term, Term[]][] = [];
 	matchNodes(replaced.by!, replaced.at, changes, before, after);
 
 	// Update container size
-	animateAttributes(
-		mutations,
-		before,
-		[[after]],
-		["viewBox", "width", "height"]
+	undoData.transitions.set(
+		"CONTAINER",
+		Object.fromEntries(
+			animateAttributes(
+				mutations,
+				before,
+				[[after]],
+				["viewBox", "width", "height"]
+			)
+		)
 	);
 
 	// Update reduced terms
-	// console.log(changes, before);
 	for (const [main, sides] of changes) {
 		const mainEl = before.querySelector<SVGElement>(
 			`[lambda-id="${main.id.str}"]`
 		)!;
 		try {
 			if (sides.length > 0) {
-				animateAttributes(
-					mutations,
-					mainEl,
-					sides.map((s) => [
-						after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
-						s.id,
-					]),
-					["x1", "x2", "y1", "y2"]
-				);
+				undoData.reduction.push({
+					fromId: main.id.str,
+					fromAttr: Object.fromEntries(
+						animateAttributes(
+							mutations,
+							mainEl,
+							sides.map((s) => [
+								after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
+								s.id,
+							]),
+							["x1", "x2", "y1", "y2"]
+						)
+					),
+					atIds: sides.map((s) => s.id.str),
+				});
 			} else {
 				// Argument not present after reducing, ex. (@x.a)b -> a
+				undoData.deleted.push({
+					"lambda-id": main.id.str,
+					x1: mainEl.getAttribute("x1")!,
+					x2: mainEl.getAttribute("x2")!,
+					y1: mainEl.getAttribute("y1")!,
+					y2: mainEl.getAttribute("y2")!,
+				});
 				mutations.push(() => {
 					mainEl.setAttribute("stroke", "transparent");
 					mainEl.addEventListener("transitionend", () => mainEl.remove());
@@ -442,12 +477,24 @@ function transitionSVG(
 
 	// Update shuffled or deleted terms
 	for (const child of children) {
-		const id = child.getAttribute("lambda-id");
+		const id = child.getAttribute("lambda-id")!;
 		const match = after.querySelector<SVGElement>(`[lambda-id="${id}"]`);
 
 		if (match)
-			animateAttributes(mutations, child, [[match]], ["x1", "x2", "y1", "y2"]);
+			undoData.transitions.set(
+				id!,
+				Object.fromEntries(
+					animateAttributes(mutations, child, [[match]], ["x1", "x2", "y1", "y2"])
+				)
+			);
 		else if (!changes.find(([a]) => a.id.str === id)) {
+			undoData.deleted.push({
+				"lambda-id": id,
+				x1: child.getAttribute("x1")!,
+				x2: child.getAttribute("x2")!,
+				y1: child.getAttribute("y1")!,
+				y2: child.getAttribute("y2")!,
+			});
 			mutations.push(() => {
 				child.setAttribute("stroke", "transparent");
 				child.addEventListener("transitionend", () => child.remove());
@@ -456,30 +503,130 @@ function transitionSVG(
 	}
 
 	mutations.forEach((cb) => cb());
+
+	return undoData;
 }
 
 export class Tromp {
 	svg: SVGElement;
-	constructor(private lambdaTree: SyntaxTree, public scale = 1) {
+	lambdaTree: Lambda;
+	private undoStack: UndoData[] = [];
+	constructor(code: string, public scale = 1) {
+		this.lambdaTree = new Lambda(code);
 		const diagramTree = this.construct();
 		this.svg = buildPath(diagramTree, scale);
 	}
 	construct() {
-		const diagramTree = rebuildTree(this.lambdaTree._tree);
+		const diagramTree = rebuildTree(this.lambdaTree.tree);
 		computeHeights(diagramTree);
 		computeWidths(diagramTree);
 		return diagramTree;
 	}
 	reduce() {
+		const lambdaString = this.lambdaTree.copy(this.lambdaTree.tree, false);
 		const replaced = this.lambdaTree.betaReduce();
 		if (!replaced.by) return false;
-		// console.log(replaced);
 
 		const diagramTree = this.construct();
 		const nextSVG = buildPath(diagramTree, this.scale);
-		transitionSVG(this.svg, nextSVG, replaced);
+		this.undoStack.push({
+			...transitionSVG(this.svg, nextSVG, replaced),
+			prevLambdaTree: lambdaString,
+		});
 		// this.svg.replaceWith(nextSVG);
 		// this.svg = nextSVG;
 		return true;
+	}
+	undo() {
+		// FIXME: Seems buggy with big terms?
+		const data = this.undoStack.pop();
+		if (!data) return;
+
+		// Remake lambda tree
+		this.lambdaTree.tree = data.prevLambdaTree;
+
+		const mutations: (() => void)[] = [];
+		const begin = `${Date.now() - startTime}ms`;
+
+		// Revert transitions
+		for (const [id, attr] of data.transitions) {
+			const elem =
+				id === "CONTAINER"
+					? this.svg
+					: this.svg.querySelector(`[lambda-id="${id}"]`)!;
+
+			const animations = Object.entries(attr).map(([key, val]) => {
+				const animate = createSVG("animate", {
+					attributeName: key,
+					to: val,
+					dur: ".3s",
+					begin,
+					fill: "freeze",
+				});
+
+				animate.addEventListener("endEvent", () => {
+					setAttributes(elem, attr);
+					animate.remove();
+				});
+				return animate;
+			});
+
+			mutations.push(() => elem.append(...animations));
+		}
+
+		// Revert reducted terms back
+		for (const { fromId, fromAttr, atIds } of data.reduction) {
+			const elements = atIds.map(
+				(id) => this.svg.querySelector(`[lambda-id="${id}"]`)!
+			);
+
+			const animations = Object.entries(fromAttr).map(([key, val]) =>
+				createSVG("animate", {
+					attributeName: key,
+					to: val,
+					dur: ".3s",
+					begin,
+					fill: "freeze",
+				})
+			);
+
+			let isFirst = true;
+			for (const elem of elements) {
+				const firstInstance = isFirst;
+				const ownAnims = isFirst
+					? animations
+					: animations.map((a) => a.cloneNode() as SVGElement);
+
+				for (const ownAnim of ownAnims) {
+					ownAnim.addEventListener("endEvent", () => {
+						if (firstInstance) {
+							setAttributes(elem, { ...fromAttr, "lambda-id": fromId });
+							ownAnim.remove();
+						} else {
+							elem.remove();
+						}
+					});
+				}
+
+				mutations.push(() => elem.append(...animations));
+				isFirst = false;
+			}
+		}
+
+		// Add back deleted terms
+		const deleted = data.deleted.map((attr) => {
+			const el = createSVG("line", attr);
+
+			// Start hidden, then transition to visibility
+			el.setAttribute("stroke", "transparent");
+			requestAnimationFrame(() =>
+				requestAnimationFrame(() => el.setAttribute("stroke", "black"))
+			);
+
+			return el;
+		});
+		this.svg.append(...deleted);
+
+		mutations.forEach((cb) => cb());
 	}
 }

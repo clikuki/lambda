@@ -26,10 +26,10 @@ export interface Replacer {
 }
 
 const REDUCTION_STEP_LIMIT = 10000;
-export class SyntaxTree {
-	_tree: Term;
+export class Lambda {
+	tree: Term;
 	constructor(code: string) {
-		this._tree = parseString(code);
+		this.tree = parseString(code);
 	}
 
 	betaReduce(attemptNominal = false) {
@@ -39,9 +39,9 @@ export class SyntaxTree {
 
 		do {
 			reduced = attemptNominal
-				? this._greedyReductionStep(this._tree)
-				: this._shallowReductionStep(this._tree, replaced);
-			if (reduced) this._tree = reduced;
+				? this._greedyReductionStep(this.tree)
+				: this._shallowReductionStep(this.tree, replaced);
+			if (reduced) this.tree = reduced;
 		} while (attemptNominal && reduced && --steps > 0);
 
 		return replaced;
@@ -136,7 +136,7 @@ export class SyntaxTree {
 		// Quick escape for strings
 		if (tree.type === "VARIABLE") {
 			if (tree.symbol === from) {
-				const copy = this._copy(to);
+				const copy = this.copy(to);
 				replaced?.at!.push(copy);
 				return copy;
 			}
@@ -170,33 +170,33 @@ export class SyntaxTree {
 		return sub;
 	}
 
-	_copy(tree: Term): Term {
+	copy(tree: Term, changeID = true): Term {
 		switch (tree.type) {
 			case "VARIABLE":
 				return {
-					id: id.next().value,
+					id: changeID ? id.next().value : tree.id,
 					type: "VARIABLE",
 					symbol: tree.symbol,
 				};
 			case "APPLICATION":
 				return {
-					id: id.next().value,
+					id: changeID ? id.next().value : tree.id,
 					type: "APPLICATION",
-					left: this._copy(tree.left),
-					right: this._copy(tree.right),
+					left: this.copy(tree.left, changeID),
+					right: this.copy(tree.right, changeID),
 				};
 			case "ABSTRACTION":
 				return {
-					id: id.next().value,
+					id: changeID ? id.next().value : tree.id,
 					type: "ABSTRACTION",
 					param: tree.param,
-					body: this._copy(tree.body),
+					body: this.copy(tree.body, changeID),
 				};
 		}
 	}
 
 	toString(collectParameters = false) {
-		return stringifyTree(this._tree, collectParameters);
+		return stringifyTree(this.tree, collectParameters);
 	}
 }
 

@@ -1,5 +1,7 @@
-import { SyntaxTree, code } from "./lambda.js";
+import { Lambda, code } from "./lambda.js";
 import { Tromp } from "./tromp.js";
+
+// TODO: Add undo
 
 // Church Boolean
 const TRUE = "@x.@y.x";
@@ -26,7 +28,7 @@ const EXP = "@b.@n.nb";
 const PRED = "@n.@f.@x.n(@g.@h.h(gf))(@u.x)(@u.u)";
 const SUB = code`@m.@n.n${PRED}m`;
 
-const syntaxTree = new SyntaxTree(
+const tromp = new Tromp(
 	// code`${ADD}${getNumeral(4)}${getNumeral(3)}`
 	// code`${getNumeral(4)}${SUCC}${getNumeral(3)}`
 	// code`${MULT}${getNumeral(4)}${getNumeral(3)}`
@@ -34,15 +36,16 @@ const syntaxTree = new SyntaxTree(
 	// code`${PRED}${getNumeral(5)}`
 	// code`${SUB}${getNumeral(20)}${getNumeral(20)}`
 
-	// code`${OR}(${NOT}(${OR}${FALSE}${TRUE}))(${AND}${TRUE}${TRUE})`
-	"(@x.xx)(@x.xx)"
+	code`${OR}(${NOT}(${OR}${FALSE}${TRUE}))(${AND}${TRUE}${TRUE})`
+	// code`(@x.x)${TRUE}`
+	// "(@x.xx)(@x.xx)"
+	// code`(@z.@y.y(z(@a.@b.ba)))(@y.y${TRUE}${FALSE})`
 );
-
-const tromp = new Tromp(syntaxTree, 1);
 document.body.appendChild(tromp.svg);
 // console.log(syntaxTree.toString());
 
 let reductionBuffer = 0;
+let undoBuffer = 0;
 document.body.addEventListener("click", () => reductionBuffer++);
 
 (function loop() {
@@ -50,8 +53,19 @@ document.body.addEventListener("click", () => reductionBuffer++);
 
 	if (tromp.svg.querySelector("animate")) return;
 
-	if (reductionBuffer > 0) {
+	if (undoBuffer > 0) {
+		undoBuffer--;
+		tromp.undo();
+	} else if (reductionBuffer > 0) {
 		reductionBuffer--;
 		tromp.reduce();
 	}
 })();
+
+window.addEventListener("keydown", (e) => {
+	if (tromp.svg.querySelector("animate")) return;
+	if (e.ctrlKey && e.key === "z") {
+		undoBuffer++;
+		reductionBuffer = 0;
+	}
+});
