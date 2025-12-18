@@ -2,45 +2,100 @@ import { getID, ID } from "./utils.js";
 
 const id = getID();
 
-export interface Abstraction {
+export interface Abstraction
+{
 	type: "ABSTRACTION";
 	param: symbol;
 	body: Term;
 	id: ID;
 }
-export interface Application {
+export interface Application
+{
 	type: "APPLICATION";
 	left: Term;
 	right: Term;
 	id: ID;
 }
-export interface Variable {
+export interface Variable
+{
 	type: "VARIABLE";
 	symbol: symbol;
 	id: ID;
 }
 export type Term = Application | Abstraction | Variable;
-export interface Replacer {
+export interface Replacer
+{
 	by?: Term;
 	at: Term[];
 }
 
+interface ReductionPoint
+{
+	abs: Abstraction,
+	var: Term,
+}
+
 const REDUCTION_STEP_LIMIT = 10000;
-export class Lambda {
+export class LambdaEval
+{
+	public findReductionPoints(
+		term: Term,
+		reductionPoints: ReductionPoint[] = [],
+	): ReductionPoint[]
+	{
+		switch (term.type)
+		{
+			case "VARIABLE":
+				break;
+
+			case "APPLICATION":
+				if (term.left.type === "ABSTRACTION")
+				{
+					reductionPoints.push({
+						abs: term.left,
+						var: term.right,
+					});
+				}
+				this.findReductionPoints(term.left, reductionPoints);
+				break;
+
+			case "ABSTRACTION":
+				this.findReductionPoints(term.body, reductionPoints);
+				break;
+		}
+
+		return reductionPoints;
+	}
+
+	public reduceWith(replacer: Replacer): Term
+	{
+		return {
+			type: "VARIABLE",
+			symbol: Symbol("sad"),
+			id: id.next().value,
+		}
+	}
+}
+
+export class Lambda
+{
 	tree: Term;
-	constructor(code: string) {
+	constructor(code: string)
+	{
 		this.tree = parseString(code);
 	}
 
-	betaReduce(attemptNominal = false) {
+	public betaReduce(attemptNominal = false)
+	{
 		let reduced: Term | null;
 		let steps = REDUCTION_STEP_LIMIT;
 		const replaced: Replacer = { at: [] };
 
-		do {
+		do
+		{
 			reduced = attemptNominal
-				? this._greedyReductionStep(this.tree)
-				: this._shallowReductionStep(this.tree, replaced);
+				? this.greedyReductionStep(this.tree)
+				: this.shallowReductionStep(this.tree, replaced);
 			if (reduced) this.tree = reduced;
 		} while (attemptNominal && reduced && --steps > 0);
 
@@ -48,17 +103,21 @@ export class Lambda {
 	}
 
 	/** Performs as much reduction as possible in a single step */
-	_greedyReductionStep(tree: Term): Term | null {
-		switch (tree.type) {
+	private greedyReductionStep(tree: Term): Term | null
+	{
+		switch (tree.type)
+		{
 			case "APPLICATION":
 				// Reduce application
 				const { left, right } = tree;
 
-				const leftReduct = this._greedyReductionStep(left) ?? left;
-				const rightReduct = this._greedyReductionStep(right) ?? right;
-				if (left.type === "ABSTRACTION") {
-					return this._substitute(left.body, left.param, right);
-				} else {
+				const leftReduct = this.greedyReductionStep(left) ?? left;
+				const rightReduct = this.greedyReductionStep(right) ?? right;
+				if (left.type === "ABSTRACTION")
+				{
+					return this.substitute(left.body, left.param, right);
+				} else
+				{
 					return {
 						id: tree.id,
 						type: "APPLICATION",
@@ -69,8 +128,9 @@ export class Lambda {
 
 			case "ABSTRACTION":
 				// Reduce abstraction body
-				const bodyReduct = this._greedyReductionStep(tree.body);
-				if (bodyReduct) {
+				const bodyReduct = this.greedyReductionStep(tree.body);
+				if (bodyReduct)
+				{
 					return {
 						id: tree.id,
 						type: "ABSTRACTION",
@@ -84,19 +144,23 @@ export class Lambda {
 	}
 
 	/** Perform one step of beta reduction */
-	_shallowReductionStep(tree: Term, replaced: Replacer): Term | null {
-		switch (tree.type) {
+	private shallowReductionStep(tree: Term, replaced: Replacer): Term | null
+	{
+		switch (tree.type)
+		{
 			case "APPLICATION":
 				// Reduce application
 				const { left, right } = tree;
 
-				if (left.type === "ABSTRACTION") {
+				if (left.type === "ABSTRACTION")
+				{
 					replaced.by = right;
-					return this._substitute(left.body, left.param, right, replaced);
+					return this.substitute(left.body, left.param, right, replaced);
 				}
 
-				const leftReduct = this._shallowReductionStep(left, replaced);
-				if (leftReduct) {
+				const leftReduct = this.shallowReductionStep(left, replaced);
+				if (leftReduct)
+				{
 					return {
 						id: tree.id,
 						type: "APPLICATION",
@@ -105,8 +169,9 @@ export class Lambda {
 					};
 				}
 
-				const rightReduct = this._shallowReductionStep(right, replaced);
-				if (rightReduct) {
+				const rightReduct = this.shallowReductionStep(right, replaced);
+				if (rightReduct)
+				{
 					return {
 						id: tree.id,
 						type: "APPLICATION",
@@ -118,8 +183,9 @@ export class Lambda {
 
 			case "ABSTRACTION":
 				// Reduce abstraction body
-				const bodyReduct = this._shallowReductionStep(tree.body, replaced);
-				if (bodyReduct) {
+				const bodyReduct = this.shallowReductionStep(tree.body, replaced);
+				if (bodyReduct)
+				{
 					return {
 						id: tree.id,
 						type: "ABSTRACTION",
@@ -132,10 +198,13 @@ export class Lambda {
 		return null;
 	}
 
-	_substitute(tree: Term, from: symbol, to: Term, replaced?: Replacer): Term {
+	private substitute(tree: Term, from: symbol, to: Term, replaced?: Replacer): Term
+	{
 		// Quick escape for strings
-		if (tree.type === "VARIABLE") {
-			if (tree.symbol === from) {
+		if (tree.type === "VARIABLE")
+		{
+			if (tree.symbol === from)
+			{
 				const copy = this.copy(to);
 				replaced?.at!.push(copy);
 				return copy;
@@ -144,25 +213,28 @@ export class Lambda {
 		}
 
 		let sub: Term;
-		if (tree.type === "APPLICATION") {
+		if (tree.type === "APPLICATION")
+		{
 			// Dealing with application
 			const { left, right } = tree;
 
 			sub = {
 				id: tree.id,
 				type: "APPLICATION",
-				left: this._substitute(left, from, to, replaced),
-				right: this._substitute(right, from, to, replaced),
+				left: this.substitute(left, from, to, replaced),
+				right: this.substitute(right, from, to, replaced),
 			};
-		} else if (tree.param !== from) {
+		} else if (tree.param !== from)
+		{
 			// Dealing with abstraction
 			sub = {
 				id: tree.id,
 				type: "ABSTRACTION",
 				param: tree.param,
-				body: this._substitute(tree.body, from, to, replaced),
+				body: this.substitute(tree.body, from, to, replaced),
 			};
-		} else {
+		} else
+		{
 			// Is abstraction, but shadows the term that we are trying to substitute
 			sub = tree;
 		}
@@ -170,8 +242,10 @@ export class Lambda {
 		return sub;
 	}
 
-	copy(tree: Term, changeID = true): Term {
-		switch (tree.type) {
+	public copy(tree: Term, changeID = true): Term
+	{
+		switch (tree.type)
+		{
 			case "VARIABLE":
 				return {
 					id: changeID ? id.next().value : tree.id,
@@ -195,7 +269,8 @@ export class Lambda {
 		}
 	}
 
-	toString(collectParameters = false) {
+	public toString(collectParameters = false)
+	{
 		return stringifyTree(this.tree, collectParameters);
 	}
 }
@@ -204,13 +279,16 @@ export const func_char = "@";
 export function parseString(
 	code: string,
 	mapping = new Map<string, symbol>()
-): Term {
+): Term
+{
 	let left: Term | null = null;
 	let right: Term | null = null;
-	for (let i = 0; i < code.length; i++) {
+	for (let i = 0; i < code.length; i++)
+	{
 		const char = code[i];
 		if (char === " ") throw SyntaxError("No spaces allowed in code string");
-		if (char === func_char) {
+		if (char === func_char)
+		{
 			// abstraction declaration
 			const start = i + 3;
 			const end = code.length;
@@ -233,7 +311,8 @@ export function parseString(
 			else right = abstraction;
 
 			i = end;
-		} else if (char === "(") {
+		} else if (char === "(")
+		{
 			// Perform parse within bracket group, this usually occurs before abstraction declarations
 			const start = i + 1;
 			const end = findBracketPair(code, i);
@@ -243,7 +322,8 @@ export function parseString(
 			else right = term;
 
 			i = end;
-		} else {
+		} else
+		{
 			// Get correspnding symbol of variable
 			const sym = mapping.get(char) ?? Symbol(char);
 			if (!mapping.has(char)) mapping.set(char, sym);
@@ -258,7 +338,8 @@ export function parseString(
 			else right = variable;
 		}
 
-		if (right) {
+		if (right)
+		{
 			// Group a and b into an application
 			left = { type: "APPLICATION", left, right, id: id.next().value };
 			right = null;
@@ -268,12 +349,15 @@ export function parseString(
 	if (!left) throw "Cannot parse empty string";
 	return left;
 }
-export function stringifyTree(tree: Term, combineParameters = false): string {
+export function stringifyTree(tree: Term, combineParameters = false): string
+{
 	let str = "";
-	if (tree.type === "VARIABLE") {
+	if (tree.type === "VARIABLE")
+	{
 		// Is this a dangerous assumption?
 		str = tree.symbol.description!;
-	} else if (tree.type === "APPLICATION") {
+	} else if (tree.type === "APPLICATION")
+	{
 		// Dealing with application
 		const { left, right } = tree;
 
@@ -283,12 +367,14 @@ export function stringifyTree(tree: Term, combineParameters = false): string {
 		if (right.type === "APPLICATION")
 			str += `(${stringifyTree(right, combineParameters)})`;
 		else str += `${stringifyTree(right, combineParameters)}`;
-	} else {
+	} else
+	{
 		// Dealing with abstraction
 		// Shorthand: Collect parameters of consecutively nested abstractions
 		let node: Term = tree.body;
 		let parameters = tree.param.description!;
-		while (combineParameters && node.type === "ABSTRACTION") {
+		while (combineParameters && node.type === "ABSTRACTION")
+		{
 			parameters += node.param.description;
 			node = node.body;
 		}
@@ -297,9 +383,11 @@ export function stringifyTree(tree: Term, combineParameters = false): string {
 	return str;
 }
 
-function findBracketPair(str: string, at: number): number {
+function findBracketPair(str: string, at: number): number
+{
 	let count = 1;
-	for (let i = at + 1; i < str.length; i++) {
+	for (let i = at + 1; i < str.length; i++)
+	{
 		const char = str[i];
 		if (char === "(") count++;
 		else if (char === ")" && !--count) return i;
@@ -310,9 +398,11 @@ function findBracketPair(str: string, at: number): number {
 export function code(
 	strings: TemplateStringsArray,
 	...values: string[]
-): string {
+): string
+{
 	let str = "";
-	for (let i = 0; i < values.length; i++) {
+	for (let i = 0; i < values.length; i++)
+	{
 		str += strings[i];
 		str += `(${values[i]})`;
 	}
