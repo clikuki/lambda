@@ -1,26 +1,27 @@
 import { getID, ID } from "./utils.js";
 
-const id = getID();
-
-export interface Abstraction
+interface LambdaNode
+{
+	type: string;
+	parent: Term | null;
+	id: ID;
+}
+export interface Abstraction extends LambdaNode
 {
 	type: "ABSTRACTION";
 	param: symbol;
 	body: Term;
-	id: ID;
 }
-export interface Application
+export interface Application extends LambdaNode
 {
 	type: "APPLICATION";
 	left: Term;
 	right: Term;
-	id: ID;
 }
-export interface Variable
+export interface Variable extends LambdaNode
 {
 	type: "VARIABLE";
 	symbol: symbol;
-	id: ID;
 }
 export type Term = Application | Abstraction | Variable;
 export interface Replacer
@@ -29,19 +30,14 @@ export interface Replacer
 	at: Term[];
 }
 
-interface ReductionPoint
-{
-	abs: Abstraction,
-	var: Term,
-}
+export const func_char = "@";
 
-const REDUCTION_STEP_LIMIT = 10000;
 export class LambdaEval
 {
 	public findReductionPoints(
 		term: Term,
-		reductionPoints: ReductionPoint[] = [],
-	): ReductionPoint[]
+		reduxPts: Application[] = [],
+	): Application[]
 	{
 		switch (term.type)
 		{
@@ -51,232 +47,179 @@ export class LambdaEval
 			case "APPLICATION":
 				if (term.left.type === "ABSTRACTION")
 				{
-					reductionPoints.push({
-						abs: term.left,
-						var: term.right,
-					});
+					reduxPts.push(term);
 				}
-				this.findReductionPoints(term.left, reductionPoints);
+				this.findReductionPoints(term.left, reduxPts);
 				break;
 
 			case "ABSTRACTION":
-				this.findReductionPoints(term.body, reductionPoints);
+				this.findReductionPoints(term.body, reduxPts);
 				break;
 		}
 
-		return reductionPoints;
+		return reduxPts;
 	}
 
-	public reduceWith(replacer: Replacer): Term
+	public performReduction(root: Term, reduxPt: Application): Term
 	{
-		return {
-			type: "VARIABLE",
-			symbol: Symbol("sad"),
-			id: id.next().value,
+		// Root term param only acts in case of root-level reduction
+		const { left, right, parent } = reduxPt;
+		if (left.type !== "ABSTRACTION") throw new Error("Left side of application must be an abstraction");
+
+		// Reduce to create partial lambda
+		// Replace reduction point with partial lambda
+		const newPart = this.substitute(left.body, left.param, right);
+
+		if (!parent) return newPart;
+		else if (parent.type === "ABSTRACTION") parent.body = newPart;
+		else if (parent.type === "APPLICATION")
+		{
+			if (parent.left === reduxPt) parent.left = newPart;
+			else parent.right = newPart;
 		}
-	}
-}
+		else throw new Error("Term parent can not be a variable");
 
-export class Lambda
-{
-	tree: Term;
-	constructor(code: string)
-	{
-		this.tree = parseString(code);
+		return root;
 	}
 
-	public betaReduce(attemptNominal = false)
+	private substitute(term: Term, sym: symbol, to: Term): Term
 	{
-		let reduced: Term | null;
-		let steps = REDUCTION_STEP_LIMIT;
-		const replaced: Replacer = { at: [] };
-
-		do
+		if (term.type === "VARIABLE")
 		{
-			reduced = attemptNominal
-				? this.greedyReductionStep(this.tree)
-				: this.shallowReductionStep(this.tree, replaced);
-			if (reduced) this.tree = reduced;
-		} while (attemptNominal && reduced && --steps > 0);
-
-		return replaced;
-	}
-
-	/** Performs as much reduction as possible in a single step */
-	private greedyReductionStep(tree: Term): Term | null
-	{
-		switch (tree.type)
-		{
-			case "APPLICATION":
-				// Reduce application
-				const { left, right } = tree;
-
-				const leftReduct = this.greedyReductionStep(left) ?? left;
-				const rightReduct = this.greedyReductionStep(right) ?? right;
-				if (left.type === "ABSTRACTION")
-				{
-					return this.substitute(left.body, left.param, right);
-				} else
-				{
-					return {
-						id: tree.id,
-						type: "APPLICATION",
-						left: leftReduct,
-						right: rightReduct,
-					};
-				}
-
-			case "ABSTRACTION":
-				// Reduce abstraction body
-				const bodyReduct = this.greedyReductionStep(tree.body);
-				if (bodyReduct)
-				{
-					return {
-						id: tree.id,
-						type: "ABSTRACTION",
-						param: tree.param,
-						body: bodyReduct,
-					};
-				}
+			if (term.symbol === sym) return this.copy(to);
+			return term;
 		}
-
-		return null;
-	}
-
-	/** Perform one step of beta reduction */
-	private shallowReductionStep(tree: Term, replaced: Replacer): Term | null
-	{
-		switch (tree.type)
+		else if (term.type === "APPLICATION")
 		{
-			case "APPLICATION":
-				// Reduce application
-				const { left, right } = tree;
-
-				if (left.type === "ABSTRACTION")
-				{
-					replaced.by = right;
-					return this.substitute(left.body, left.param, right, replaced);
-				}
-
-				const leftReduct = this.shallowReductionStep(left, replaced);
-				if (leftReduct)
-				{
-					return {
-						id: tree.id,
-						type: "APPLICATION",
-						left: leftReduct,
-						right,
-					};
-				}
-
-				const rightReduct = this.shallowReductionStep(right, replaced);
-				if (rightReduct)
-				{
-					return {
-						id: tree.id,
-						type: "APPLICATION",
-						left,
-						right: rightReduct,
-					};
-				}
-				break;
-
-			case "ABSTRACTION":
-				// Reduce abstraction body
-				const bodyReduct = this.shallowReductionStep(tree.body, replaced);
-				if (bodyReduct)
-				{
-					return {
-						id: tree.id,
-						type: "ABSTRACTION",
-						param: tree.param,
-						body: bodyReduct,
-					};
-				}
-		}
-
-		return null;
-	}
-
-	private substitute(tree: Term, from: symbol, to: Term, replaced?: Replacer): Term
-	{
-		// Quick escape for strings
-		if (tree.type === "VARIABLE")
-		{
-			if (tree.symbol === from)
-			{
-				const copy = this.copy(to);
-				replaced?.at!.push(copy);
-				return copy;
-			}
-			return tree;
-		}
-
-		let sub: Term;
-		if (tree.type === "APPLICATION")
-		{
-			// Dealing with application
-			const { left, right } = tree;
-
-			sub = {
-				id: tree.id,
+			return {
 				type: "APPLICATION",
-				left: this.substitute(left, from, to, replaced),
-				right: this.substitute(right, from, to, replaced),
+				id: term.id,
+				parent: term.parent,
+				left: this.substitute(term.left, sym, to),
+				right: this.substitute(term.right, sym, to),
 			};
-		} else if (tree.param !== from)
-		{
-			// Dealing with abstraction
-			sub = {
-				id: tree.id,
-				type: "ABSTRACTION",
-				param: tree.param,
-				body: this.substitute(tree.body, from, to, replaced),
-			};
-		} else
-		{
-			// Is abstraction, but shadows the term that we are trying to substitute
-			sub = tree;
 		}
-
-		return sub;
+		else if (term.param !== sym)
+		{
+			return {
+				type: "ABSTRACTION",
+				id: term.id,
+				parent: term.parent,
+				param: term.param,
+				body: this.substitute(term.body, sym, to),
+			};
+		}
+		// Is abstraction, but shadows the term that we are trying to substitute
+		else return this.copy(term);
 	}
 
-	public copy(tree: Term, changeID = true): Term
+	public copy(term: Term): Term
 	{
-		switch (tree.type)
+		switch (term.type)
 		{
 			case "VARIABLE":
 				return {
-					id: changeID ? id.next().value : tree.id,
+					id: getID(),
+					parent: term.parent,
 					type: "VARIABLE",
-					symbol: tree.symbol,
+					symbol: term.symbol,
 				};
 			case "APPLICATION":
 				return {
-					id: changeID ? id.next().value : tree.id,
+					id: getID(),
+					parent: term.parent,
 					type: "APPLICATION",
-					left: this.copy(tree.left, changeID),
-					right: this.copy(tree.right, changeID),
+					left: this.copy(term.left),
+					right: this.copy(term.right),
 				};
 			case "ABSTRACTION":
 				return {
-					id: changeID ? id.next().value : tree.id,
+					id: getID(),
+					parent: term.parent,
 					type: "ABSTRACTION",
-					param: tree.param,
-					body: this.copy(tree.body, changeID),
+					param: term.param,
+					body: this.copy(term.body),
 				};
 		}
 	}
-
-	public toString(collectParameters = false)
-	{
-		return stringifyTree(this.tree, collectParameters);
-	}
 }
 
-export const func_char = "@";
-export function parseString(
+export function code(
+	strings: TemplateStringsArray,
+	...values: string[]
+): string
+{
+	let str = "";
+	for (let i = 0; i < values.length; i++)
+	{
+		str += strings[i];
+		str += `(${values[i]})`;
+	}
+	str += strings.at(-1);
+	return str.replaceAll(" ", "");
+}
+
+export function parseString(code: string): Term
+{
+	const root = buildTermTree(code);
+
+	const nextNodes = [root];
+	while (nextNodes.length)
+	{
+		const term = nextNodes.pop()!;
+
+		switch (term.type)
+		{
+			case "APPLICATION":
+				term.left.parent = term.right.parent = term;
+				nextNodes.push(term.left, term.right);
+				break;
+
+			case "ABSTRACTION":
+				term.body.parent = term;
+				nextNodes.push(term.body);
+				break;
+		}
+	}
+
+	return root;
+}
+
+export function stringifyLambda(tree: Term, combineParameters = false): string
+{
+	let str = "";
+	if (tree.type === "VARIABLE")
+	{
+		// Is this a dangerous assumption?
+		str = tree.symbol.description!;
+	} else if (tree.type === "APPLICATION")
+	{
+		// Dealing with application
+		const { left, right } = tree;
+
+		str += stringifyLambda(left, combineParameters);
+
+		// If the second term is an application itself, then explicitly parenthesize
+		if (right.type === "APPLICATION")
+			str += `(${stringifyLambda(right, combineParameters)})`;
+		else str += `${stringifyLambda(right, combineParameters)}`;
+	} else
+	{
+		// Dealing with abstraction
+		// Shorthand: Collect parameters of consecutively nested abstractions
+		let node: Term = tree.body;
+		let parameters = tree.param.description!;
+		while (combineParameters && node.type === "ABSTRACTION")
+		{
+			parameters += node.param.description;
+			node = node.body;
+		}
+		str = `(${func_char}${parameters}.${stringifyLambda(node, combineParameters)})`;
+	}
+	return str;
+}
+
+function buildTermTree(
 	code: string,
 	mapping = new Map<string, symbol>()
 ): Term
@@ -299,12 +242,13 @@ export function parseString(
 			localMapping.set(paramChar, param);
 
 			// All characters at this point must be consumed
-			const body = parseString(code.slice(start, end), localMapping);
+			const body = buildTermTree(code.slice(start, end), localMapping);
 			const abstraction: Abstraction = {
 				type: "ABSTRACTION",
+				parent: null,
 				param,
 				body,
-				id: id.next().value,
+				id: getID(),
 			};
 
 			if (!left) left = abstraction;
@@ -317,7 +261,7 @@ export function parseString(
 			const start = i + 1;
 			const end = findBracketPair(code, i);
 
-			let term = parseString(code.slice(start, end), mapping);
+			let term = buildTermTree(code.slice(start, end), mapping);
 			if (!left) left = term;
 			else right = term;
 
@@ -331,8 +275,9 @@ export function parseString(
 			// Add single character as variable
 			const variable: Term = {
 				type: "VARIABLE",
+				parent: null,
 				symbol: sym,
-				id: id.next().value,
+				id: getID(),
 			};
 			if (!left) left = variable;
 			else right = variable;
@@ -341,46 +286,19 @@ export function parseString(
 		if (right)
 		{
 			// Group a and b into an application
-			left = { type: "APPLICATION", left, right, id: id.next().value };
+			left = {
+				type: "APPLICATION",
+				parent: null,
+				left,
+				right,
+				id: getID()
+			};
 			right = null;
 		}
 	}
 
 	if (!left) throw "Cannot parse empty string";
 	return left;
-}
-export function stringifyTree(tree: Term, combineParameters = false): string
-{
-	let str = "";
-	if (tree.type === "VARIABLE")
-	{
-		// Is this a dangerous assumption?
-		str = tree.symbol.description!;
-	} else if (tree.type === "APPLICATION")
-	{
-		// Dealing with application
-		const { left, right } = tree;
-
-		str += stringifyTree(left, combineParameters);
-
-		// If the second term is an application itself, then explicitly parenthesize
-		if (right.type === "APPLICATION")
-			str += `(${stringifyTree(right, combineParameters)})`;
-		else str += `${stringifyTree(right, combineParameters)}`;
-	} else
-	{
-		// Dealing with abstraction
-		// Shorthand: Collect parameters of consecutively nested abstractions
-		let node: Term = tree.body;
-		let parameters = tree.param.description!;
-		while (combineParameters && node.type === "ABSTRACTION")
-		{
-			parameters += node.param.description;
-			node = node.body;
-		}
-		str = `(${func_char}${parameters}.${stringifyTree(node, combineParameters)})`;
-	}
-	return str;
 }
 
 function findBracketPair(str: string, at: number): number
@@ -393,19 +311,4 @@ function findBracketPair(str: string, at: number): number
 		else if (char === ")" && !--count) return i;
 	}
 	return -1;
-}
-
-export function code(
-	strings: TemplateStringsArray,
-	...values: string[]
-): string
-{
-	let str = "";
-	for (let i = 0; i < values.length; i++)
-	{
-		str += strings[i];
-		str += `(${values[i]})`;
-	}
-	str += strings.at(-1);
-	return str.replaceAll(" ", "");
 }

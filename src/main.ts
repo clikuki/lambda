@@ -1,4 +1,4 @@
-import { code, Lambda, LambdaEval, parseString, stringifyTree } from "./lambda.js";
+import { code, LambdaEval, stringifyLambda, parseString } from "./lambda.js";
 
 class Expr
 {
@@ -37,11 +37,17 @@ class Expr
 	static SUB = code`@m.@n.n${this.PRED}m`;
 }
 
-// @ts-expect-error
-window.lambda = Lambda;
-
 const lEval = new LambdaEval();
-const l = parseString("(@a.(@b.bb)a)(@c.cc)");
-console.log(stringifyTree(l));
-console.log(l);
-console.log(lEval.findReductionPoints(l));
+const l1 = parseString("(@x.(@y.(@a.(@b.b)a)y)x)z");
+console.log(stringifyLambda(l1));
+
+const l1Reduxes = lEval.findReductionPoints(l1);
+console.log(l1Reduxes);
+for (let i = 0; i < l1Reduxes.length; i++)
+{
+	const l1Redux = l1Reduxes[i];
+	console.log(i, " : ", l1Redux);
+
+	const l2 = lEval.performReduction(l1, l1Redux);
+	console.log(stringifyLambda(l2));
+}
