@@ -2,11 +2,22 @@ export class Graph<T>
 {
 	private map = new Map<T, Set<T>>();
 
-	public getConnections(from: T): Set<T>
+	public getAllConnections()
+	{
+		return this.map.entries();
+	}
+
+	public getConnectionsOf(from: T): Set<T>
 	{
 		let connections = this.map.get(from);
 		if (!connections) connections = new Set();
 		return connections;
+	}
+
+	/** Add node to graph without any connections */
+	public add(node: T): void
+	{
+		this.map.set(node, new Set());
 	}
 
 	public connect(from: T, to: T): void

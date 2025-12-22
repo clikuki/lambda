@@ -1,13 +1,15 @@
+import { Graph } from "./graph.js";
 import { LambdaEval, stringifyLambda, parseString } from "./lambda.js";
+import { Network } from "./networkVisualizer.js";
 
 const lEval = new LambdaEval();
-const l1 = parseString("(@b.(@c.(@d.(@e.(eeeee))(dddd))(ccc))(bb))a");
-console.log(stringifyLambda(l1));
+const graph = new Graph<string>();
 
-const l1Reduxes = lEval.findReductionPoints(l1);
-for (let i = 0; i < l1Reduxes.length; i++)
-{
-	const l1Redux = l1Reduxes[i];
-	const l2 = lEval.performReduction(l1, l1Redux);
-	console.log(i, ": ", stringifyLambda(l2));
-}
+const l1s = "(@b.(@c.(@d.(@e.(eeeee))(dddd))(ccc))(bb))a";
+// const l1 = parseString(l1s);
+graph.add(l1s);
+
+const network = new Network(
+	document.body,
+	graph,
+);
