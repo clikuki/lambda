@@ -1,14 +1,16 @@
-import { Replacer, Lambda, type Term } from "./lambda.js";
+import { Replacer, type Term } from "./lambda.js";
 import { createSVG, ID, setAttributes } from "./utils.js";
 
 const startTime = Date.now();
 
-interface Parameter {
+interface Parameter
+{
 	symbol: symbol;
 	y: number;
 	id: ID;
 }
-interface DiagramAbstraction {
+interface DiagramAbstraction
+{
 	type: "ABSTRACTION";
 	parameters: [symbol, ID][];
 	body: DiagramApplication | DiagramVariable;
@@ -21,7 +23,8 @@ interface DiagramAbstraction {
 	y2?: number;
 	paramLines?: [symbol, Parameter][];
 }
-interface DiagramApplication {
+interface DiagramApplication
+{
 	type: "APPLICATION";
 	left: DiagramTerm;
 	right: DiagramTerm;
@@ -32,7 +35,8 @@ interface DiagramApplication {
 	x2?: number;
 	y?: number;
 }
-interface DiagramVariable {
+interface DiagramVariable
+{
 	type: "VARIABLE";
 	symbol: symbol;
 	parent?: DiagramTerm;
@@ -44,17 +48,6 @@ interface DiagramVariable {
 }
 type DiagramTerm = DiagramAbstraction | DiagramApplication | DiagramVariable;
 
-interface UndoData {
-	prevLambdaTree: Term;
-	transitions: Map<string, Record<string, string>>;
-	reduction: {
-		fromId: string;
-		fromAttr: Record<string, string>;
-		atIds: string[];
-	}[];
-	deleted: Record<string, string>[];
-}
-
 const style = {
 	linewidth: 2,
 	paramLineGap: 6,
@@ -63,16 +56,18 @@ const style = {
 	pad: 2,
 };
 
-function rebuildTree(tree: Term): DiagramTerm {
+function buildTree(tree: Term): DiagramTerm
+{
 	if (tree.type === "VARIABLE")
 		return {
 			type: "VARIABLE",
 			symbol: tree.symbol,
 			id: tree.id,
 		};
-	else if (tree.type === "APPLICATION") {
-		const left = rebuildTree(tree.left);
-		const right = rebuildTree(tree.right);
+	else if (tree.type === "APPLICATION")
+	{
+		const left = buildTree(tree.left);
+		const right = buildTree(tree.right);
 		const node: DiagramApplication = {
 			type: "APPLICATION",
 			left,
@@ -82,10 +77,12 @@ function rebuildTree(tree: Term): DiagramTerm {
 		left.parent = node;
 		right.parent = node;
 		return node;
-	} else {
+	} else
+	{
 		// Find all parameters until first non-abstraction is hit
 		const parameters: [symbol, ID][] = [];
-		const trueBody = (function findParameters(node = tree): Term {
+		const trueBody = (function findParameters(node = tree): Term
+		{
 			parameters.push([node.param, node.id]);
 			if (node.body.type === "ABSTRACTION") return findParameters(node.body);
 			else return node.body;
@@ -94,7 +91,7 @@ function rebuildTree(tree: Term): DiagramTerm {
 		const node: DiagramAbstraction = {
 			type: "ABSTRACTION",
 			parameters,
-			body: rebuildTree(trueBody) as DiagramVariable,
+			body: buildTree(trueBody) as DiagramVariable,
 			id: parameters.at(-1)![1],
 		};
 		node.body.parent = node;
@@ -102,13 +99,17 @@ function rebuildTree(tree: Term): DiagramTerm {
 	}
 }
 
-function findRelevantAbstraction(node: DiagramTerm, sym: symbol) {
+function findRelevantAbstraction(node: DiagramTerm, sym: symbol)
+{
 	let binding: DiagramAbstraction | null = null;
 	let current: DiagramTerm | undefined = node;
 
-	while (current) {
-		if (current.type === "ABSTRACTION") {
-			if (current.paramLines?.find(([s]) => s === sym)) {
+	while (current)
+	{
+		if (current.type === "ABSTRACTION")
+		{
+			if (current.paramLines?.find(([s]) => s === sym))
+			{
 				binding = current;
 				break; // Stop once we find the binding abstraction
 			}
@@ -122,12 +123,15 @@ function findRelevantAbstraction(node: DiagramTerm, sym: symbol) {
 function findExtremeTerm(
 	term: DiagramTerm,
 	direction: "LEFT" | "RIGHT"
-): DiagramVariable {
+): DiagramVariable
+{
 	let current: DiagramTerm | null = term;
 	let result: DiagramTerm | null = null;
 
-	while (current) {
-		switch (current.type) {
+	while (current)
+	{
+		switch (current.type)
+		{
 			case "ABSTRACTION":
 				current = current.body;
 				break;
@@ -141,7 +145,8 @@ function findExtremeTerm(
 		}
 	}
 
-	if (!result || result.type !== "VARIABLE") {
+	if (!result || result.type !== "VARIABLE")
+	{
 		throw new SyntaxError(`Could not find ${direction}-most variable`);
 	}
 	return result;
@@ -150,8 +155,10 @@ function findExtremeTerm(
 function hasAbstractionAtExtreme(
 	node: DiagramTerm,
 	direction: "LEFT" | "RIGHT"
-): boolean {
-	switch (node.type) {
+): boolean
+{
+	switch (node.type)
+	{
 		case "ABSTRACTION":
 			return true;
 		case "APPLICATION":
@@ -162,11 +169,14 @@ function hasAbstractionAtExtreme(
 	}
 }
 
-function computeHeights(t: DiagramTerm, y = 0) {
-	switch (t.type) {
+function computeHeights(t: DiagramTerm, y = 0)
+{
+	switch (t.type)
+	{
 		case "ABSTRACTION":
 			t.y1 = y;
-			t.paramLines = t.parameters.map(([p, id]) => {
+			t.paramLines = t.parameters.map(([p, id]) =>
+			{
 				const lineY = y + style.linewidth / 2;
 				y += style.paramLineGap;
 				return [p, { symbol: p, y: lineY, id }];
@@ -197,11 +207,14 @@ function computeHeights(t: DiagramTerm, y = 0) {
 	}
 }
 
-function computeWidths(t: DiagramTerm, x = 0) {
-	switch (t.type) {
+function computeWidths(t: DiagramTerm, x = 0)
+{
+	switch (t.type)
+	{
 		case "ABSTRACTION":
 			t.x1 = x;
-			if (!hasAbstractionAtExtreme(t.body, "LEFT")) {
+			if (!hasAbstractionAtExtreme(t.body, "LEFT"))
+			{
 				// Avoids compounding left paddings with separate inner abstractions
 				x += style.applicationColGap;
 			}
@@ -231,16 +244,21 @@ function computeWidths(t: DiagramTerm, x = 0) {
 	}
 }
 
-function getTreeSize(tree: DiagramTerm): [number, number] {
+function getTreeSize(tree: DiagramTerm): [number, number]
+{
 	const height = findExtremeTerm(tree, "LEFT").y2 ?? 0;
 
 	let width = 0;
-	if (tree.type === "ABSTRACTION") {
+	if (tree.type === "ABSTRACTION")
+	{
 		width = tree.x2! - tree.x1!;
-	} else {
+	} else
+	{
 		let current: DiagramTerm | null = tree;
-		while (current) {
-			switch (current.type) {
+		while (current)
+		{
+			switch (current.type)
+			{
 				case "ABSTRACTION":
 					width = current.x2!;
 					current = null;
@@ -267,13 +285,16 @@ function matchNodes(
 	matches: [Term, Term[]][],
 	b: SVGElement,
 	a: SVGElement
-) {
+)
+{
 	matches.push([main, sides]);
-	switch (main.type) {
+	switch (main.type)
+	{
 		case "ABSTRACTION":
 			matchNodes(
 				main.body,
-				sides.map((s) => {
+				sides.map((s) =>
+				{
 					if (s.type !== main.type) throw Error("Side tree does not match");
 					return s.body;
 				}),
@@ -283,10 +304,12 @@ function matchNodes(
 			);
 			break;
 		case "APPLICATION":
-			for (const branch of ["left", "right"] as const) {
+			for (const branch of ["left", "right"] as const)
+			{
 				matchNodes(
 					main[branch],
-					sides.map((s) => {
+					sides.map((s) =>
+					{
 						if (s.type !== "APPLICATION") throw Error("Side tree does not match");
 						return s[branch];
 					}),
@@ -303,19 +326,22 @@ function animateAttributes(
 	mainEl: SVGElement,
 	sideEls: [SVGElement, ID?][],
 	attributes: string[]
-) {
+)
+{
 	const oldAttr = new Map(
 		attributes.map((attr) => [attr, mainEl.getAttribute(attr)!])
 	);
 
 	let isFirst = true;
 	const begin = `${Date.now() - startTime}ms`;
-	for (const [sideEl, newID] of sideEls) {
+	for (const [sideEl, newID] of sideEls)
+	{
 		const copy = isFirst ? mainEl : (mainEl.cloneNode() as SVGElement);
 		isFirst = false;
 
 		const newAttr: Record<string, string> = {};
-		const animations = attributes.flatMap((attr) => {
+		const animations = attributes.flatMap((attr) =>
+		{
 			const newValue = sideEl.getAttribute(attr) ?? "";
 			if (newValue === oldAttr.get(attr)) return [];
 			newAttr[attr] = newValue;
@@ -328,14 +354,16 @@ function animateAttributes(
 				fill: "freeze",
 			});
 
-			animate.addEventListener("endEvent", () => {
+			animate.addEventListener("endEvent", () =>
+			{
 				setAttributes(copy, newAttr);
 				animate.remove();
 			});
 			return animate;
 		});
 
-		mutations.push(() => {
+		mutations.push(() =>
+		{
 			if (newID) copy.setAttribute("lambda-id", newID.str);
 			copy.append(...animations);
 			if (copy !== mainEl) mainEl.parentNode!.appendChild(copy);
@@ -345,7 +373,8 @@ function animateAttributes(
 	return oldAttr;
 }
 
-function buildPath(tree: DiagramTerm): SVGElement {
+function buildPath(tree: DiagramTerm): SVGElement
+{
 	const [height, width] = getTreeSize(tree);
 	const container = createSVG("svg", {
 		viewBox: `0 0 ${width} ${height}`,
@@ -356,10 +385,13 @@ function buildPath(tree: DiagramTerm): SVGElement {
 		"stroke-linecap": "butt",
 	});
 
-	(function draw(node: DiagramTerm) {
-		switch (node.type) {
+	(function draw(node: DiagramTerm)
+	{
+		switch (node.type)
+		{
 			case "ABSTRACTION":
-				for (const [, line] of node.paramLines!) {
+				for (const [, line] of node.paramLines!)
+				{
 					container.appendChild(
 						createSVG("line", {
 							"lambda-id": line.id.str,
@@ -405,97 +437,74 @@ function buildPath(tree: DiagramTerm): SVGElement {
 	return container;
 }
 
-function transitionSVG(
+export function transitionSVG(
 	before: SVGElement,
 	after: SVGElement,
 	replaced: Replacer
-): Omit<UndoData, "prevLambdaTree"> {
+): void
+{
 	const mutations: (() => void)[] = [];
 	const children = Array.from(before.children) as SVGElement[];
-	const undoData: Omit<UndoData, "prevLambdaTree"> = {
-		transitions: new Map(),
-		reduction: [],
-		deleted: [],
-	};
 
 	const changes: [Term, Term[]][] = [];
 	matchNodes(replaced.by!, replaced.at, changes, before, after);
 
 	// Update container size
-	undoData.transitions.set(
-		"CONTAINER",
-		Object.fromEntries(
-			animateAttributes(
-				mutations,
-				before,
-				[[after]],
-				["viewBox", "width", "height"]
-			)
-		)
-	);
+	animateAttributes(
+		mutations,
+		before,
+		[[after]],
+		["viewBox", "width", "height"]
+	)
 
 	// Update reduced terms
-	for (const [main, sides] of changes) {
+	for (const [main, sides] of changes)
+	{
 		const mainEl = before.querySelector<SVGElement>(
 			`[lambda-id="${main.id.str}"]`
 		)!;
-		try {
-			if (sides.length > 0) {
-				undoData.reduction.push({
-					fromId: main.id.str,
-					fromAttr: Object.fromEntries(
-						animateAttributes(
-							mutations,
-							mainEl,
-							sides.map((s) => [
-								after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
-								s.id,
-							]),
-							["x1", "x2", "y1", "y2"]
-						)
-					),
-					atIds: sides.map((s) => s.id.str),
-				});
-			} else {
+		try
+		{
+			if (sides.length > 0)
+			{
+				animateAttributes(
+					mutations,
+					mainEl,
+					sides.map((s) => [
+						after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
+						s.id,
+					]),
+					["x1", "x2", "y1", "y2"]
+				)
+			} else
+			{
 				// Argument not present after reducing, ex. (@x.a)b -> a
-				undoData.deleted.push({
-					"lambda-id": main.id.str,
-					x1: mainEl.getAttribute("x1")!,
-					x2: mainEl.getAttribute("x2")!,
-					y1: mainEl.getAttribute("y1")!,
-					y2: mainEl.getAttribute("y2")!,
-				});
-				mutations.push(() => {
+				mutations.push(() =>
+				{
 					mainEl.setAttribute("stroke", "transparent");
 					mainEl.addEventListener("transitionend", () => mainEl.remove());
 				});
 			}
-		} catch (err) {
+		} catch (err)
+		{
 			throw err;
 		}
 	}
 
 	// Update shuffled or deleted terms
-	for (const child of children) {
+	for (const child of children)
+	{
 		const id = child.getAttribute("lambda-id")!;
 		const match = after.querySelector<SVGElement>(`[lambda-id="${id}"]`);
 
 		if (match)
-			undoData.transitions.set(
-				id!,
-				Object.fromEntries(
-					animateAttributes(mutations, child, [[match]], ["x1", "x2", "y1", "y2"])
-				)
-			);
-		else if (!changes.find(([a]) => a.id.str === id)) {
-			undoData.deleted.push({
-				"lambda-id": id,
-				x1: child.getAttribute("x1")!,
-				x2: child.getAttribute("x2")!,
-				y1: child.getAttribute("y1")!,
-				y2: child.getAttribute("y2")!,
-			});
-			mutations.push(() => {
+		{
+			animateAttributes(mutations, child, [[match]], ["x1", "x2", "y1", "y2"])
+		}
+		else if (!changes.find(([a]) => a.id.str === id))
+		{
+			mutations.push(() =>
+			{
 				child.setAttribute("stroke", "transparent");
 				child.addEventListener("transitionend", () => child.remove());
 			});
@@ -503,138 +512,13 @@ function transitionSVG(
 	}
 
 	mutations.forEach((cb) => cb());
-
-	return undoData;
 }
 
-export class Tromp {
-	svg: SVGElement;
-	lambdaTree: Lambda;
-	private undoStack: UndoData[] = [];
-	constructor(code: string) {
-		this.lambdaTree = new Lambda(code);
-		const diagramTree = this.construct();
-		this.svg = buildPath(diagramTree);
-	}
-	use(code: string) {
-		this.lambdaTree = new Lambda(code);
-		const diagramTree = this.construct();
-		const newSVG = buildPath(diagramTree);
-
-		this.svg.replaceWith(newSVG);
-		this.svg = newSVG;
-	}
-	construct() {
-		const diagramTree = rebuildTree(this.lambdaTree.tree);
-		computeHeights(diagramTree);
-		computeWidths(diagramTree);
-		return diagramTree;
-	}
-	reduce() {
-		const lambdaString = this.lambdaTree.copy(this.lambdaTree.tree, false);
-		const replaced = this.lambdaTree.betaReduce();
-		if (!replaced.by) return false;
-
-		const diagramTree = this.construct();
-		const nextSVG = buildPath(diagramTree);
-		this.undoStack.push({
-			...transitionSVG(this.svg, nextSVG, replaced),
-			prevLambdaTree: lambdaString,
-		});
-		// this.svg.replaceWith(nextSVG);
-		// this.svg = nextSVG;
-		return true;
-	}
-	undo() {
-		// FIXME: Seems buggy with big terms?
-		const data = this.undoStack.pop();
-		if (!data) return;
-
-		// Remake lambda tree
-		this.lambdaTree.tree = data.prevLambdaTree;
-
-		const mutations: (() => void)[] = [];
-		const begin = `${Date.now() - startTime}ms`;
-
-		// Revert transitions
-		for (const [id, attr] of data.transitions) {
-			const elem =
-				id === "CONTAINER"
-					? this.svg
-					: this.svg.querySelector(`[lambda-id="${id}"]`)!;
-
-			const animations = Object.entries(attr).map(([key, val]) => {
-				const animate = createSVG("animate", {
-					attributeName: key,
-					to: val,
-					dur: ".3s",
-					begin,
-					fill: "freeze",
-				});
-
-				animate.addEventListener("endEvent", () => {
-					setAttributes(elem, attr);
-					animate.remove();
-				});
-				return animate;
-			});
-
-			mutations.push(() => elem.append(...animations));
-		}
-
-		// Revert reducted terms back
-		for (const { fromId, fromAttr, atIds } of data.reduction) {
-			const elements = atIds.map(
-				(id) => this.svg.querySelector(`[lambda-id="${id}"]`)!
-			);
-
-			const animations = Object.entries(fromAttr).map(([key, val]) =>
-				createSVG("animate", {
-					attributeName: key,
-					to: val,
-					dur: ".3s",
-					begin,
-					fill: "freeze",
-				})
-			);
-
-			let isFirst = true;
-			for (const elem of elements) {
-				const firstInstance = isFirst;
-				const ownAnims = isFirst
-					? animations
-					: animations.map((a) => a.cloneNode() as SVGElement);
-
-				for (const ownAnim of ownAnims) {
-					ownAnim.addEventListener("endEvent", () => {
-						if (firstInstance) {
-							setAttributes(elem, { ...fromAttr, "lambda-id": fromId });
-							ownAnim.remove();
-						} else {
-							elem.remove();
-						}
-					});
-				}
-
-				mutations.push(() => elem.append(...animations));
-				isFirst = false;
-			}
-		}
-
-		// Add back deleted terms
-		const deleted = data.deleted.map((attr) => {
-			const el = createSVG("line", attr);
-
-			// Start hidden, then transition to visibility
-			el.setAttribute("stroke", "transparent");
-			requestAnimationFrame(() =>
-				requestAnimationFrame(() => el.setAttribute("stroke", "black"))
-			);
-
-			return el;
-		});
-		this.svg.append(...deleted);
-
-		mutations.forEach((cb) => cb());
-	}
+export function constructDiagram(term: Term): SVGElement
+{
+	const diagramTree = buildTree(term);
+	computeHeights(diagramTree);
+	computeWidths(diagramTree);
+	const treeSVG = buildPath(diagramTree);
+	return treeSVG;
 }

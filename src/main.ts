@@ -1,4 +1,5 @@
 import { code, LambdaEval, stringifyLambda, parseString } from "./lambda.js";
+import { constructDiagram } from "./tromp.js";
 
 class Expr
 {
@@ -37,17 +38,25 @@ class Expr
 	static SUB = code`@m.@n.n${this.PRED}m`;
 }
 
+const mainEl = document.querySelector("main")!;
+
 const lEval = new LambdaEval();
-const l1 = parseString("(@x.(@y.(@a.(@b.b)a)y)x)z");
+const l1Cont = document.createElement("div");
+const l1 = parseString("(@b.(@c.(@d.(@e.(eeeee))(dddd))(ccc))(bb))a");
 console.log(stringifyLambda(l1));
+l1Cont.append(constructDiagram(l1));
+mainEl.append(l1Cont);
 
 const l1Reduxes = lEval.findReductionPoints(l1);
+const l2Cont = document.createElement("div");
 console.log(l1Reduxes);
 for (let i = 0; i < l1Reduxes.length; i++)
 {
 	const l1Redux = l1Reduxes[i];
-	console.log(i, " : ", l1Redux);
+	// console.log(i, ": ", l1Redux);
 
 	const l2 = lEval.performReduction(l1, l1Redux);
-	console.log(stringifyLambda(l2));
+	console.log(i, ": ", stringifyLambda(l2));
+	l2Cont.append(constructDiagram(l2));
 }
+mainEl.append(l2Cont);

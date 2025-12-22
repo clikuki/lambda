@@ -3,7 +3,6 @@ import { getID, ID } from "./utils.js";
 interface LambdaNode
 {
 	type: string;
-	parent: Term | null;
 	id: ID;
 }
 export interface Abstraction extends LambdaNode
@@ -62,31 +61,20 @@ export class LambdaEval
 
 	public performReduction(root: Term, reduxPt: Application): Term
 	{
-		// Root term param only acts in case of root-level reduction
-		const { left, right, parent } = reduxPt;
-		if (left.type !== "ABSTRACTION") throw new Error("Left side of application must be an abstraction");
+		const { left, right } = reduxPt;
+		if (left.type !== "ABSTRACTION") throw new Error(
+			"Left side of application must be an abstraction"
+		);
 
-		// Reduce to create partial lambda
-		// Replace reduction point with partial lambda
 		const newPart = this.substitute(left.body, left.param, right);
-
-		if (!parent) return newPart;
-		else if (parent.type === "ABSTRACTION") parent.body = newPart;
-		else if (parent.type === "APPLICATION")
-		{
-			if (parent.left === reduxPt) parent.left = newPart;
-			else parent.right = newPart;
-		}
-		else throw new Error("Term parent can not be a variable");
-
-		return root;
+		return this.cloneWithSwap(root, reduxPt, newPart);
 	}
 
 	private substitute(term: Term, sym: symbol, to: Term): Term
 	{
 		if (term.type === "VARIABLE")
 		{
-			if (term.symbol === sym) return this.copy(to);
+			if (term.symbol === sym) return this.clone(to);
 			return term;
 		}
 		else if (term.type === "APPLICATION")
@@ -94,7 +82,6 @@ export class LambdaEval
 			return {
 				type: "APPLICATION",
 				id: term.id,
-				parent: term.parent,
 				left: this.substitute(term.left, sym, to),
 				right: this.substitute(term.right, sym, to),
 			};
@@ -104,42 +91,72 @@ export class LambdaEval
 			return {
 				type: "ABSTRACTION",
 				id: term.id,
-				parent: term.parent,
 				param: term.param,
 				body: this.substitute(term.body, sym, to),
 			};
 		}
 		// Is abstraction, but shadows the term that we are trying to substitute
-		else return this.copy(term);
+		else return this.clone(term);
 	}
 
-	public copy(term: Term): Term
+	private clone(term: Term): Term
 	{
 		switch (term.type)
 		{
 			case "VARIABLE":
 				return {
 					id: getID(),
-					parent: term.parent,
 					type: "VARIABLE",
 					symbol: term.symbol,
 				};
 			case "APPLICATION":
 				return {
 					id: getID(),
-					parent: term.parent,
 					type: "APPLICATION",
-					left: this.copy(term.left),
-					right: this.copy(term.right),
+					left: this.clone(term.left),
+					right: this.clone(term.right),
 				};
 			case "ABSTRACTION":
 				return {
 					id: getID(),
-					parent: term.parent,
 					type: "ABSTRACTION",
 					param: term.param,
-					body: this.copy(term.body),
+					body: this.clone(term.body),
 				};
+			default:
+				throw new Error("Invalid node type")
+		}
+	}
+
+	private cloneWithSwap(term: Term, at: Term, part: Term): Term
+	{
+		// Assume use-case refers to only one ref occurence in tree
+		if (term === at) return part;
+
+		switch (term.type)
+		{
+			case "VARIABLE":
+				return {
+					id: getID(),
+					type: "VARIABLE",
+					symbol: term.symbol,
+				};
+			case "APPLICATION":
+				return {
+					id: getID(),
+					type: "APPLICATION",
+					left: this.cloneWithSwap(term.left, at, part),
+					right: this.cloneWithSwap(term.right, at, part),
+				};
+			case "ABSTRACTION":
+				return {
+					id: getID(),
+					type: "ABSTRACTION",
+					param: term.param,
+					body: this.cloneWithSwap(term.body, at, part),
+				};
+			default:
+				throw new Error("Invalid node type")
 		}
 	}
 }
@@ -157,32 +174,6 @@ export function code(
 	}
 	str += strings.at(-1);
 	return str.replaceAll(" ", "");
-}
-
-export function parseString(code: string): Term
-{
-	const root = buildTermTree(code);
-
-	const nextNodes = [root];
-	while (nextNodes.length)
-	{
-		const term = nextNodes.pop()!;
-
-		switch (term.type)
-		{
-			case "APPLICATION":
-				term.left.parent = term.right.parent = term;
-				nextNodes.push(term.left, term.right);
-				break;
-
-			case "ABSTRACTION":
-				term.body.parent = term;
-				nextNodes.push(term.body);
-				break;
-		}
-	}
-
-	return root;
 }
 
 export function stringifyLambda(tree: Term, combineParameters = false): string
@@ -219,7 +210,7 @@ export function stringifyLambda(tree: Term, combineParameters = false): string
 	return str;
 }
 
-function buildTermTree(
+export function parseString(
 	code: string,
 	mapping = new Map<string, symbol>()
 ): Term
@@ -242,10 +233,9 @@ function buildTermTree(
 			localMapping.set(paramChar, param);
 
 			// All characters at this point must be consumed
-			const body = buildTermTree(code.slice(start, end), localMapping);
+			const body = parseString(code.slice(start, end), localMapping);
 			const abstraction: Abstraction = {
 				type: "ABSTRACTION",
-				parent: null,
 				param,
 				body,
 				id: getID(),
@@ -261,21 +251,20 @@ function buildTermTree(
 			const start = i + 1;
 			const end = findBracketPair(code, i);
 
-			let term = buildTermTree(code.slice(start, end), mapping);
+			let term = parseString(code.slice(start, end), mapping);
 			if (!left) left = term;
 			else right = term;
 
 			i = end;
 		} else
 		{
-			// Get correspnding symbol of variable
+			// Get corresponding symbol of variable
 			const sym = mapping.get(char) ?? Symbol(char);
 			if (!mapping.has(char)) mapping.set(char, sym);
 
 			// Add single character as variable
 			const variable: Term = {
 				type: "VARIABLE",
-				parent: null,
 				symbol: sym,
 				id: getID(),
 			};
@@ -288,7 +277,6 @@ function buildTermTree(
 			// Group a and b into an application
 			left = {
 				type: "APPLICATION",
-				parent: null,
 				left,
 				right,
 				id: getID()
