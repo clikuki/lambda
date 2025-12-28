@@ -8,7 +8,7 @@ interface LambdaNode
 export interface Abstraction extends LambdaNode
 {
 	type: "ABSTRACTION";
-	param: symbol;
+	param: ID;
 	body: Term;
 }
 export interface Application extends LambdaNode
@@ -20,7 +20,6 @@ export interface Application extends LambdaNode
 export interface Variable extends LambdaNode
 {
 	type: "VARIABLE";
-	symbol: symbol;
 }
 export type Term = Application | Abstraction | Variable;
 export interface Replacer
@@ -70,29 +69,36 @@ export class LambdaEval
 		return this.cloneWithSwap(root, reduxPt, newPart);
 	}
 
-	private substitute(term: Term, sym: symbol, to: Term): Term
+	private substitute(
+		term: Term,
+		id: ID,
+		to: Term,
+	): Term
 	{
 		if (term.type === "VARIABLE")
 		{
-			if (term.symbol === sym) return this.clone(to);
-			return term;
+			if (term.id === id) return this.clone(to);
+			return {
+				type: "VARIABLE",
+				id: term.id,
+			};
 		}
 		else if (term.type === "APPLICATION")
 		{
 			return {
 				type: "APPLICATION",
 				id: term.id,
-				left: this.substitute(term.left, sym, to),
-				right: this.substitute(term.right, sym, to),
+				left: this.substitute(term.left, id, to),
+				right: this.substitute(term.right, id, to),
 			};
 		}
-		else if (term.param !== sym)
+		else if (term.param !== id)
 		{
 			return {
 				type: "ABSTRACTION",
 				id: term.id,
 				param: term.param,
-				body: this.substitute(term.body, sym, to),
+				body: this.substitute(term.body, id, to),
 			};
 		}
 		// Is abstraction, but shadows the term that we are trying to substitute
@@ -105,20 +111,19 @@ export class LambdaEval
 		{
 			case "VARIABLE":
 				return {
-					id: getID(),
+					id: term.id,
 					type: "VARIABLE",
-					symbol: term.symbol,
 				};
 			case "APPLICATION":
 				return {
-					id: getID(),
+					id: term.id,
 					type: "APPLICATION",
 					left: this.clone(term.left),
 					right: this.clone(term.right),
 				};
 			case "ABSTRACTION":
 				return {
-					id: getID(),
+					id: term.id,
 					type: "ABSTRACTION",
 					param: term.param,
 					body: this.clone(term.body),
@@ -128,7 +133,11 @@ export class LambdaEval
 		}
 	}
 
-	private cloneWithSwap(term: Term, at: Term, part: Term): Term
+	private cloneWithSwap(
+		term: Term,
+		at: Term,
+		part: Term,
+	): Term
 	{
 		// Assume use-case refers to only one ref occurence in tree
 		if (term === at) return part;
@@ -137,20 +146,19 @@ export class LambdaEval
 		{
 			case "VARIABLE":
 				return {
-					id: getID(),
+					id: term.id,
 					type: "VARIABLE",
-					symbol: term.symbol,
 				};
 			case "APPLICATION":
 				return {
-					id: getID(),
+					id: term.id,
 					type: "APPLICATION",
 					left: this.cloneWithSwap(term.left, at, part),
 					right: this.cloneWithSwap(term.right, at, part),
 				};
 			case "ABSTRACTION":
 				return {
-					id: getID(),
+					id: term.id,
 					type: "ABSTRACTION",
 					param: term.param,
 					body: this.cloneWithSwap(term.body, at, part),
@@ -176,43 +184,50 @@ export function code(
 	return str.replaceAll(" ", "");
 }
 
-export function stringifyLambda(tree: Term, combineParameters = false): string
-{
-	let str = "";
-	if (tree.type === "VARIABLE")
-	{
-		// Is this a dangerous assumption?
-		str = tree.symbol.description!;
-	} else if (tree.type === "APPLICATION")
-	{
-		// Dealing with application
-		const { left, right } = tree;
+// // TODO: Fix lambda stringifier
+// // Disabled due to difficulties supporting with variable naming
+// export function stringifyLambda(
+// 	tree: Term,
+// 	combineParameters = false,
+// 	localMapping = new Map<ID, number>()
+// ): string
+// {
+// 	let str = "";
+// 	if (tree.type === "VARIABLE")
+// 	{
+// 		// TODO: use map for names
+// 		str = tree.id.str;
+// 	} else if (tree.type === "APPLICATION")
+// 	{
+// 		// Dealing with application
+// 		const { left, right } = tree;
 
-		str += stringifyLambda(left, combineParameters);
+// 		str += stringifyLambda(left, combineParameters);
 
-		// If the second term is an application itself, then explicitly parenthesize
-		if (right.type === "APPLICATION")
-			str += `(${stringifyLambda(right, combineParameters)})`;
-		else str += `${stringifyLambda(right, combineParameters)}`;
-	} else
-	{
-		// Dealing with abstraction
-		// Shorthand: Collect parameters of consecutively nested abstractions
-		let node: Term = tree.body;
-		let parameters = tree.param.description!;
-		while (combineParameters && node.type === "ABSTRACTION")
-		{
-			parameters += node.param.description;
-			node = node.body;
-		}
-		str = `(${func_char}${parameters}.${stringifyLambda(node, combineParameters)})`;
-	}
-	return str;
-}
+// 		// If the second term is an application itself, then explicitly parenthesize
+// 		if (right.type === "APPLICATION")
+// 			str += `(${stringifyLambda(right, combineParameters)})`;
+// 		else str += `${stringifyLambda(right, combineParameters)}`;
+// 	} else
+// 	{
+// 		// Dealing with abstraction
+// 		// Shorthand: Collect parameters of consecutively nested abstractions
+// 		let node: Term = tree.body;
+// 		let parameters = tree.param.str!;
+// 		while (combineParameters && node.type === "ABSTRACTION")
+// 		{
+// 			parameters += node.param.str;
+// 			node = node.body;
+// 		}
+// 		str = `(${func_char}${parameters}.${stringifyLambda(node, combineParameters)})`;
+// 	}
+// 	return str;
+// }
 
-export function parseString(
+export function parseLambda(
 	code: string,
-	mapping = new Map<string, symbol>()
+	mapping = new Map<string, ID>(),
+	IDGen = getID(),
 ): Term
 {
 	let left: Term | null = null;
@@ -228,17 +243,17 @@ export function parseString(
 			const end = code.length;
 
 			const paramChar = code[i + 1];
-			const param = Symbol(paramChar);
+			const param = IDGen();
 			const localMapping = new Map(mapping);
 			localMapping.set(paramChar, param);
 
 			// All characters at this point must be consumed
-			const body = parseString(code.slice(start, end), localMapping);
+			const body = parseLambda(code.slice(start, end), localMapping);
 			const abstraction: Abstraction = {
 				type: "ABSTRACTION",
 				param,
 				body,
-				id: getID(),
+				id: IDGen(),
 			};
 
 			if (!left) left = abstraction;
@@ -251,22 +266,21 @@ export function parseString(
 			const start = i + 1;
 			const end = findBracketPair(code, i);
 
-			let term = parseString(code.slice(start, end), mapping);
+			let term = parseLambda(code.slice(start, end), mapping);
 			if (!left) left = term;
 			else right = term;
 
 			i = end;
 		} else
 		{
-			// Get corresponding symbol of variable
-			const sym = mapping.get(char) ?? Symbol(char);
-			if (!mapping.has(char)) mapping.set(char, sym);
+			// Get corresponding ID of variable
+			const id = mapping.get(char) ?? IDGen();
+			if (!mapping.has(char)) mapping.set(char, id);
 
 			// Add single character as variable
 			const variable: Term = {
 				type: "VARIABLE",
-				symbol: sym,
-				id: getID(),
+				id,
 			};
 			if (!left) left = variable;
 			else right = variable;
@@ -279,7 +293,7 @@ export function parseString(
 				type: "APPLICATION",
 				left,
 				right,
-				id: getID()
+				id: IDGen(),
 			};
 			right = null;
 		}

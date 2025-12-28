@@ -1,5 +1,5 @@
 import { Graph } from "./graph.js";
-import { LambdaEval, stringifyLambda, parseString } from "./lambda.js";
+import { LambdaEval, parseLambda } from "./lambda.js";
 import { Network } from "./networkVisualizer.js";
 
 const lEval = new LambdaEval();

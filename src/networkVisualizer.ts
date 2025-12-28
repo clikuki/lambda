@@ -1,5 +1,5 @@
 import { Graph } from "./graph.js";
-import { parseString as parseLambda } from "./lambda.js";
+import { parseLambda } from "./lambda.js";
 import { constructDiagram } from "./tromp.js";
 import { createSVG } from "./utils.js";
 

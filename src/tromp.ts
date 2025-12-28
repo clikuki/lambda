@@ -3,16 +3,15 @@ import { createSVG, ID, setAttributes } from "./utils.js";
 
 const startTime = Date.now();
 
-interface Parameter
+interface ParamLine
 {
-	symbol: symbol;
-	y: number;
 	id: ID;
+	y: number;
 }
 interface DiagramAbstraction
 {
 	type: "ABSTRACTION";
-	parameters: [symbol, ID][];
+	parameters: ID[];
 	body: DiagramApplication | DiagramVariable;
 	parent?: DiagramTerm;
 	id: ID;
@@ -21,7 +20,7 @@ interface DiagramAbstraction
 	x2?: number;
 	y1?: number;
 	y2?: number;
-	paramLines?: [symbol, Parameter][];
+	paramLines?: ParamLine[];
 }
 interface DiagramApplication
 {
@@ -38,7 +37,6 @@ interface DiagramApplication
 interface DiagramVariable
 {
 	type: "VARIABLE";
-	symbol: symbol;
 	parent?: DiagramTerm;
 	id: ID;
 
@@ -61,7 +59,6 @@ function buildTree(tree: Term): DiagramTerm
 	if (tree.type === "VARIABLE")
 		return {
 			type: "VARIABLE",
-			symbol: tree.symbol,
 			id: tree.id,
 		};
 	else if (tree.type === "APPLICATION")
@@ -80,10 +77,10 @@ function buildTree(tree: Term): DiagramTerm
 	} else
 	{
 		// Find all parameters until first non-abstraction is hit
-		const parameters: [symbol, ID][] = [];
+		const parameters: ID[] = [];
 		const trueBody = (function findParameters(node = tree): Term
 		{
-			parameters.push([node.param, node.id]);
+			parameters.push(node.id);
 			if (node.body.type === "ABSTRACTION") return findParameters(node.body);
 			else return node.body;
 		})();
@@ -92,14 +89,14 @@ function buildTree(tree: Term): DiagramTerm
 			type: "ABSTRACTION",
 			parameters,
 			body: buildTree(trueBody) as DiagramVariable,
-			id: parameters.at(-1)![1],
+			id: parameters.at(-1)!,
 		};
 		node.body.parent = node;
 		return node;
 	}
 }
 
-function findRelevantAbstraction(node: DiagramTerm, sym: symbol)
+function findRelevantAbstraction(node: DiagramTerm, id: ID)
 {
 	let binding: DiagramAbstraction | null = null;
 	let current: DiagramTerm | undefined = node;
@@ -108,7 +105,7 @@ function findRelevantAbstraction(node: DiagramTerm, sym: symbol)
 	{
 		if (current.type === "ABSTRACTION")
 		{
-			if (current.paramLines?.find(([s]) => s === sym))
+			if (current.paramLines?.find((p) => p.id === id))
 			{
 				binding = current;
 				break; // Stop once we find the binding abstraction
@@ -175,11 +172,14 @@ function computeHeights(t: DiagramTerm, y = 0)
 	{
 		case "ABSTRACTION":
 			t.y1 = y;
-			t.paramLines = t.parameters.map(([p, id]) =>
+			t.paramLines = t.parameters.map(id =>
 			{
 				const lineY = y + style.linewidth / 2;
 				y += style.paramLineGap;
-				return [p, { symbol: p, y: lineY, id }];
+				return {
+					y: lineY,
+					id,
+				} satisfies ParamLine;
 			});
 
 			computeHeights(t.body, y);
@@ -199,9 +199,9 @@ function computeHeights(t: DiagramTerm, y = 0)
 			break;
 
 		case "VARIABLE":
-			const binding = findRelevantAbstraction(t, t.symbol);
-			const symLinePair = binding?.paramLines?.find(([s]) => s === t.symbol);
-			t.y1 = symLinePair?.[1].y ?? y + style.applicationRowGap / 2;
+			const binding = findRelevantAbstraction(t, t.id);
+			const linePair = binding?.paramLines?.find((p) => p.id === t.id);
+			t.y1 = linePair?.y ?? y + style.applicationRowGap / 2;
 			t.y2 = y + style.applicationRowGap;
 			break;
 	}
@@ -390,7 +390,7 @@ function buildPath(tree: DiagramTerm): SVGElement
 		switch (node.type)
 		{
 			case "ABSTRACTION":
-				for (const [, line] of node.paramLines!)
+				for (const line of node.paramLines!)
 				{
 					container.appendChild(
 						createSVG("line", {

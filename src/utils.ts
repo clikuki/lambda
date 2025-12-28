@@ -3,12 +3,15 @@ export interface ID
 	str: string;
 }
 
-let i = 0;
-export function getID(): ID
+export function getID()
 {
-	return {
-		str: "id-" + (i++).toString().padStart(4, "0"),
-	};
+	let i = 0;
+	return function ()
+	{
+		return {
+			str: "id-" + (i++).toString().padStart(4, "0"),
+		};
+	}
 }
 
 export function setAttributes(elem: Element, attr: Record<string, any>)
