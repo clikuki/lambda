@@ -80,7 +80,7 @@ function buildTree(tree: Term): DiagramTerm
 		const parameters: ID[] = [];
 		const trueBody = (function findParameters(node = tree): Term
 		{
-			parameters.push(node.id);
+			parameters.push(node.param);
 			if (node.body.type === "ABSTRACTION") return findParameters(node.body);
 			else return node.body;
 		})();
