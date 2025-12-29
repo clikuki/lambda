@@ -1,16 +1,22 @@
 import { Graph } from "./graph.js";
-import { parseLambda } from "./lambda.js";
-import { constructDiagram } from "./tromp.js";
 import { createSVG } from "./utils.js";
 import { Vector } from "./vector.js";
 
 interface NodeData
 {
 	svg: SVGElement;
-	mass: number;
 	pos: Vector;
 	vel: Vector;
 	acc: Vector;
+}
+
+const enum Constants
+{
+	repulsionCoef = 300,
+	springCoef = -1,
+	springLength = 200,
+	dampingCoef = 0.95,
+	maxRepulsion = 100,
 }
 
 export class Network
@@ -19,12 +25,6 @@ export class Network
 	public edgePathsSVG: SVGElement;
 
 	private nodeMap = new Map<string, NodeData>();
-
-	private repulsionConst = 40;
-	private attractionConst = -1;
-	private attractionEqui = 200;
-	private dampingConst = 0.95;
-	private maxRepulsion = 100;
 
 	private style = {
 		linewidth: 2,
@@ -63,7 +63,6 @@ export class Network
 			if (!node)
 			{
 				const radius = 30;
-				const mass = 10;
 				const pos = Vector.add(
 					new Vector(innerWidth / 2, innerHeight / 2),
 					Vector.from(Math.random() * Math.PI * 2, Math.random() * 50),
@@ -78,7 +77,7 @@ export class Network
 					"stroke-width": 0,
 				});
 
-				node = { pos, vel, acc, svg, mass };
+				node = { pos, vel, acc, svg };
 				this.nodeMap.set(nodeStr, node);
 				this.worldSVG.append(node.svg);
 			}
@@ -108,7 +107,7 @@ export class Network
 	public applyForce(node: NodeData, force: Vector): void
 	{
 		node.acc = Vector.add(
-			Vector.div(force, node.mass),
+			force,
 			node.acc,
 		);
 	}
@@ -125,9 +124,8 @@ export class Network
 				if (this.graph.isConnected(aStr, bStr))
 				{
 					const distVec = Vector.sub(a.pos, b.pos);
-					const dist = Vector.mag(distVec);
-					const offset = dist - this.attractionEqui;
-					const springMag = this.attractionConst * offset;
+					const dist = Math.max(Vector.mag(distVec), 0.0000001);
+					const springMag = Constants.springCoef * Math.log(dist / Constants.springLength);
 					const springForce = Vector.setMag(distVec, springMag);
 					this.applyForce(a, springForce);
 					springForce.x *= -1;
@@ -139,7 +137,7 @@ export class Network
 					const distVec = Vector.sub(a.pos, b.pos);
 					const distSqr = Vector.magSqr(distVec);
 					const repelMag = Math.min(
-						this.repulsionConst * a.mass * b.mass / distSqr, this.maxRepulsion
+						Constants.repulsionCoef / distSqr, Constants.maxRepulsion
 					);
 					const repelForce = Vector.mult(Vector.normalize(distVec), repelMag);
 					this.applyForce(a, repelForce);
@@ -155,7 +153,7 @@ export class Network
 	{
 		for (const [, a] of this.nodeMap)
 		{
-			a.vel = Vector.mult(Vector.add(a.vel, a.acc), this.dampingConst);
+			a.vel = Vector.mult(Vector.add(a.vel, a.acc), Constants.dampingCoef);
 			a.pos = Vector.add(a.pos, a.vel);
 			a.acc = Vector.zero();
 
@@ -178,22 +176,5 @@ export class Network
 		}
 
 		this.edgePathsSVG.setAttribute("d", edgePath);
-	}
-
-	private getCenterOfMass(): Vector
-	{
-		let totalMass = 0, xNumerator = 0, yNumerator = 0;
-
-		for (const [, a] of this.nodeMap)
-		{
-			totalMass += a.mass;
-			xNumerator += a.mass * a.pos.x;
-			yNumerator += a.mass * a.pos.y;
-		}
-
-		return new Vector(
-			xNumerator / totalMass,
-			yNumerator / totalMass,
-		);
 	}
 }
