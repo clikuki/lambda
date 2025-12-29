@@ -19,9 +19,10 @@ export class Network
 
 	private nodeMap = new Map<string, NodeData>();
 
-	private repulsionConst = 1;
-	private attractionConst = 20;
-	private attractionEqui = 50;
+	private repulsionConst = 20;
+	private attractionConst = -1;
+	private attractionEqui = 100;
+	private dampingConst = 0.95;
 
 	private style = {
 		linewidth: 2,
@@ -99,19 +100,20 @@ export class Network
 		{
 			for (const [bStr, b] of this.nodeMap)
 			{
-				if (a === b) continue;
+				// Dedupe
+				if (a === b || a.pos.x > b.pos.x) continue;
 
 				if (this.graph.isConnected(aStr, bStr))
 				{
-					const distVec = Vector.sub(b.pos, a.pos);
+					const distVec = Vector.sub(a.pos, b.pos);
 					const dist = Vector.mag(distVec);
-					const offset = Math.abs(dist - this.attractionEqui);
-					const springMag = -this.attractionConst * offset;
+					const offset = dist - this.attractionEqui;
+					const springMag = this.attractionConst * offset;
 					const springForce = Vector.setMag(distVec, springMag);
 					this.applyForce(a, springForce);
 					springForce.x *= -1;
 					springForce.y *= -1;
-					// this.applyForce(b, springForce);
+					this.applyForce(b, springForce);
 				}
 				else
 				{
@@ -136,7 +138,7 @@ export class Network
 			// const attractForce = Vector.mult(Vector.normalize(distVec), attractMag);
 			// this.applyForce(a, attractForce);
 
-			a.vel = Vector.add(a.vel, a.acc);
+			a.vel = Vector.mult(Vector.add(a.vel, a.acc), this.dampingConst);
 			a.pos = Vector.add(a.pos, a.vel);
 			a.acc = Vector.zero();
 
