@@ -14,6 +14,13 @@ export class Graph<T>
 		return connections;
 	}
 
+	public isConnected(from: T, to: T): boolean
+	{
+		const connections = this.map.get(from);
+		if (connections) return connections.has(to);
+		return false;
+	}
+
 	/** Add node to graph without any connections */
 	public add(node: T): void
 	{
