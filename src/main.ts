@@ -9,22 +9,48 @@ import { Network } from "./networkVisualizer.js";
 // const l1 = parseString(l1s);
 // graph.add(l1s);
 
-const testGraph = new Graph<string>();
-testGraph.add("green");
-testGraph.add("red");
-testGraph.add("blue");
-testGraph.biconnect("green", "red")
+const colors = [
+	"aqua",
+	"black",
+	"blue",
+	"fuchsia",
+	"gray",
+	"green",
+	"lime",
+	"maroon",
+	"navy",
+	"olive",
+	"purple",
+	"red",
+	"silver",
+	"teal",
+];
+
+const graph = new Graph<string>();
+for (const color of colors)
+{
+	graph.add(color);
+}
+
+let paired = 0;
+while (paired < colors.length)
+{
+	const a = colors[Math.floor(Math.random() * colors.length)];
+	const b = colors[Math.floor(Math.random() * colors.length)];
+	graph.biconnect(a, b);
+	paired += 1;
+}
 
 const network = new Network(
 	document.body,
-	testGraph,
+	graph,
 );
 
 requestAnimationFrame(function loop()
 {
 	requestAnimationFrame(loop);
 
-	network.updateNodes();
+	network.update();
 })
 
 // @ts-expect-error
