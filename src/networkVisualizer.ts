@@ -5,6 +5,7 @@ import { Vector } from "./vector.js";
 interface NodeData
 {
 	svg: SVGElement;
+	radius: number;
 	pos: Vector;
 	vel: Vector;
 	acc: Vector;
@@ -12,11 +13,10 @@ interface NodeData
 
 const enum Constants
 {
-	repulsionCoef = 300,
-	springCoef = -1,
+	repulsionCoef = 500,
+	springCoef = 5,
 	springLength = 200,
-	dampingCoef = 0.95,
-	maxRepulsion = 100,
+	dampingCoef = 0.90,
 }
 
 export class Network
@@ -73,11 +73,12 @@ export class Network
 					r: radius,
 					cx: pos.x,
 					cy: pos.y,
+					// transform: `translate(${pos.x}, ${pos.y})`,
 					fill: nodeStr,
 					"stroke-width": 0,
 				});
 
-				node = { pos, vel, acc, svg };
+				node = { radius, pos, vel, acc, svg };
 				this.nodeMap.set(nodeStr, node);
 				this.worldSVG.append(node.svg);
 			}
@@ -114,18 +115,19 @@ export class Network
 
 	private handleInterForces(): void
 	{
-		for (const [aStr, a] of this.nodeMap)
+		const nodes = Array.from(this.nodeMap.entries());
+		for (let i = 0; i < nodes.length; i++)
 		{
-			for (const [bStr, b] of this.nodeMap)
+			const [aStr, a] = nodes[i];
+			for (let j = i + 1; j < nodes.length; j++)
 			{
-				// Dedupe
-				if (a === b || a.pos.x > b.pos.x) continue;
+				const [bStr, b] = nodes[j];
 
 				if (this.graph.isConnected(aStr, bStr))
 				{
 					const distVec = Vector.sub(a.pos, b.pos);
 					const dist = Math.max(Vector.mag(distVec), 0.0000001);
-					const springMag = Constants.springCoef * Math.log(dist / Constants.springLength);
+					const springMag = -Constants.springCoef * Math.log(dist / Constants.springLength);
 					const springForce = Vector.setMag(distVec, springMag);
 					this.applyForce(a, springForce);
 					springForce.x *= -1;
@@ -135,10 +137,8 @@ export class Network
 				else
 				{
 					const distVec = Vector.sub(a.pos, b.pos);
-					const distSqr = Vector.magSqr(distVec);
-					const repelMag = Math.min(
-						Constants.repulsionCoef / distSqr, Constants.maxRepulsion
-					);
+					const dist = Math.max(Vector.mag(distVec), 5);
+					const repelMag = Constants.repulsionCoef / (dist * dist);
 					const repelForce = Vector.mult(Vector.normalize(distVec), repelMag);
 					this.applyForce(a, repelForce);
 					repelForce.x *= -1;
@@ -159,6 +159,7 @@ export class Network
 
 			a.svg.setAttribute("cx", String(a.pos.x));
 			a.svg.setAttribute("cy", String(a.pos.y));
+			// a.svg.setAttribute("transform", `translate(${a.pos.x},${a.pos.y})`);
 		}
 	}
 
