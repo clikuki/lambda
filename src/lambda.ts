@@ -185,45 +185,43 @@ export function code(
 	return str.replaceAll(" ", "");
 }
 
-// // TODO: Fix lambda stringifier
-// // Disabled due to difficulties supporting with variable naming
-// export function stringifyLambda(
-// 	tree: Term,
-// 	combineParameters = false,
-// 	localMapping = new Map<ID, number>()
-// ): string
-// {
-// 	let str = "";
-// 	if (tree.type === "VARIABLE")
-// 	{
-// 		// TODO: use map for names
-// 		str = tree.id.str;
-// 	} else if (tree.type === "APPLICATION")
-// 	{
-// 		// Dealing with application
-// 		const { left, right } = tree;
-
-// 		str += stringifyLambda(left, combineParameters);
-
-// 		// If the second term is an application itself, then explicitly parenthesize
-// 		if (right.type === "APPLICATION")
-// 			str += `(${stringifyLambda(right, combineParameters)})`;
-// 		else str += `${stringifyLambda(right, combineParameters)}`;
-// 	} else
-// 	{
-// 		// Dealing with abstraction
-// 		// Shorthand: Collect parameters of consecutively nested abstractions
-// 		let node: Term = tree.body;
-// 		let parameters = tree.param.str!;
-// 		while (combineParameters && node.type === "ABSTRACTION")
-// 		{
-// 			parameters += node.param.str;
-// 			node = node.body;
-// 		}
-// 		str = `(${func_char}${parameters}.${stringifyLambda(node, combineParameters)})`;
-// 	}
-// 	return str;
-// }
+export function stringifyLambda(
+	term: Term,
+	depth = 0,
+	mapping = new Map<ID, string>(),
+): string
+{
+	let str;
+	switch (term.type)
+	{
+		case "ABSTRACTION":
+			let params = "";
+			let t = term as Term;
+			while (t.type === "ABSTRACTION")
+			{
+				mapping.set(t.param, String(depth++));
+				params += `${func_char}`
+				t = t.body;
+			}
+			const body = stringifyLambda(t, depth--, mapping);
+			str = `${params} ${body}`;
+			if (!depth) return str;
+			else return `(${str})`;
+		case "APPLICATION":
+			str = `${stringifyLambda(term.left, depth, mapping)} `;
+			const right = stringifyLambda(term.right, depth, mapping);
+			if (term.right.type === "APPLICATION") return str + `(${right})`;
+			else return str + right;
+		case "VARIABLE":
+			let char = mapping.get(term.id);
+			if (!char)
+			{
+				char = "-1";
+				mapping.set(term.id, char);
+			}
+			return char;
+	}
+}
 
 export function parseLambda(
 	code: string,

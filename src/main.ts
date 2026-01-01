@@ -19,7 +19,7 @@ for (let i = 0; i < 10; i++)
 	const newTerms: Term[] = [];
 	for (const term of terms)
 	{
-		console.log(term);
+		// console.log(term);
 
 		const reduxes = LE.findReductionPoints(term);
 		for (const redux of reduxes)
@@ -32,9 +32,9 @@ for (let i = 0; i < 10; i++)
 
 	terms.length = 0;
 	terms.push(...newTerms);
-	console.log("==========================");
+	// console.log("==========================");
 }
-terms.forEach(t => console.log(t));
+// terms.forEach(t => console.log(t));
 
 const network = new Network(
 	document.body,
