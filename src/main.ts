@@ -1,70 +1,40 @@
 import { Graph } from "./graph.js";
-import { LambdaEval, parseLambda } from "./lambda.js";
+import { code, LambdaEval, parseLambda, Term } from "./lambda.js";
 import { Network } from "./networkVisualizer.js";
+import { Expr } from "./presetExpressions.js";
 
-// const lEval = new LambdaEval();
-// const graph = new Graph<string>();
+const graph = new Graph<Term>();
+const LE = new LambdaEval();
+// const seed = "(@b.(@c.(@d.(@e.(eeeee))(dddd))(ccc))(bb))a";
+// const seed = "(@x.x)(@x.x)";
+const seed = code`(${Expr.ADD}${Expr.numeral(1)})${Expr.numeral(1)}`;
+// const seed = "@f.@x.f((@a.@b.ab)fx)";
+// const seed = "@f.@x.f((@b.fb)x)";
+// const seed = "@f.@x.f(fx)";
+const terms = [parseLambda(seed)];
+graph.add(terms[0]);
 
-// const l1s = "(@b.(@c.(@d.(@e.(eeeee))(dddd))(ccc))(bb))a";
-// const l1 = parseString(l1s);
-// graph.add(l1s);
-
-const colors = [
-	"aqua",
-	"black",
-	"blue",
-	"fuchsia",
-	"gray",
-	"green",
-	"lime",
-	"maroon",
-	"navy",
-	"olive",
-	"purple",
-	"red",
-	"silver",
-	"teal",
-];
-
-const graph = new Graph<string>();
-graph.add(colors[0])
-
-for (let i = 1; i < colors.length; i++)
+for (let i = 0; i < 10; i++)
 {
-	const a = colors[i];
-	graph.add(a);
-	const nodes = Array.from(graph.getAllConnections());
-	let connectionCnt = Math.floor(Math.random() * 2 + 1);
-	while (connectionCnt)
+	const newTerms: Term[] = [];
+	for (const term of terms)
 	{
-		const [b] = nodes[Math.floor(Math.random() * nodes.length)];
-		if (a === b) continue;
-		graph.biconnect(a, b);
-		connectionCnt--;
+		console.log(term);
+
+		const reduxes = LE.findReductionPoints(term);
+		for (const redux of reduxes)
+		{
+			const reduxed = LE.performReduction(term, redux);
+			graph.biconnect(term, reduxed);
+			newTerms.push(reduxed);
+		}
 	}
+
+	terms.length = 0;
+	terms.push(...newTerms);
+	console.log("==========================");
 }
-
-// for (const color of colors)
-// {
-// 	graph.add(color);
-// }
-// graph.biconnect(colors[0], colors[1])
-
-// for (let i = 0, j = colors.length - 1; i < colors.length; j = i++)
-// for (let i = 1, j = 0; i < colors.length; j = i++)
-// {
-// 	const a = colors[i];
-// 	const b = colors[j];
-// 	graph.biconnect(a, b);
-// }
-// let paired = 0;
-// while (paired < colors.length)
-// {
-// 	const a = colors[Math.floor(Math.random() * colors.length)];
-// 	const b = colors[Math.floor(Math.random() * colors.length)];
-// 	graph.biconnect(a, b);
-// 	paired += 1;
-// }
+terms.forEach(t => console.log(t));
 
 const network = new Network(
 	document.body,

@@ -1,4 +1,6 @@
 import { Graph } from "./graph.js";
+import { Term } from "./lambda.js";
+import { constructDiagram } from "./tromp.js";
 import { createSVG } from "./utils.js";
 import { Vector } from "./vector.js";
 
@@ -23,7 +25,7 @@ export class Network
 		dampingCoef: 0.8,
 	}
 
-	private nodeMap = new Map<string, NodeData>();
+	private nodeMap = new Map<Term, NodeData>();
 
 	private style = {
 		linewidth: 2,
@@ -35,7 +37,7 @@ export class Network
 
 	constructor(
 		container: HTMLElement,
-		private graph: Graph<string>
+		private graph: Graph<Term>
 	)
 	{
 		this.worldSVG = createSVG("svg", {
@@ -46,7 +48,9 @@ export class Network
 			"stroke-width": this.style.linewidth,
 			"stroke-linecap": "butt",
 		});
-		this.edgePathsSVG = createSVG("path");
+		this.edgePathsSVG = createSVG("path", {
+			stroke: "gray",
+		});
 
 		this.worldSVG.append(this.edgePathsSVG);
 		container.append(this.worldSVG);
@@ -56,44 +60,25 @@ export class Network
 
 	public renewStateFromGraph(): void
 	{
-		for (const [nodeStr,] of this.graph.getAllConnections())
+		for (const [nodeTerm,] of this.graph.getAllConnections())
 		{
-			let node = this.nodeMap.get(nodeStr);
+			let node = this.nodeMap.get(nodeTerm);
 			if (!node)
 			{
-				const radius = 30;
+				// const radius = Math.random() * 120 + 30;
+				const svg = constructDiagram(nodeTerm);
+				const radius = Math.max(+svg.getAttribute("width")!, +svg.getAttribute("height")!);
 				const pos = Vector.add(
 					new Vector(innerWidth / 2, innerHeight / 2),
 					Vector.from(Math.random() * Math.PI * 2, Math.random() * 50),
 				);
 				const vel = Vector.zero();
 				const acc = Vector.zero();
-				const svg = createSVG("circle", {
-					r: radius,
-					cx: pos.x,
-					cy: pos.y,
-					// transform: `translate(${pos.x}, ${pos.y})`,
-					fill: nodeStr,
-					"stroke-width": 0,
-				});
 
 				node = { radius, pos, vel, acc, svg };
-				this.nodeMap.set(nodeStr, node);
+				this.nodeMap.set(nodeTerm, node);
 				this.worldSVG.append(node.svg);
 			}
-
-			// let lambda = this.lambdaDataMap.get(termStr);
-			// if (!lambda)
-			// {
-			// 	lambda = {
-			// 		str: termStr,
-			// 		pos: { x: 200, y: 200 },
-			// 		svg: constructDiagram(parseLambda(termStr)),
-			// 	}
-
-			// 	this.lambdaDataMap.set(termStr, lambda);
-			// 	this.worldSVG.append(lambda.svg);
-			// }
 		}
 	}
 
@@ -111,19 +96,20 @@ export class Network
 
 		for (let i = 0; i < nodes.length; i++)
 		{
-			const [aStr, a] = nodes[i];
+			const [aTerm, a] = nodes[i];
 			for (let j = i + 1; j < nodes.length; j++)
 			{
-				const [bStr, b] = nodes[j];
+				const [bTerm, b] = nodes[j];
 
 				const distVec = Vector.sub(a.pos, b.pos);
 				const dist = Math.max(Vector.mag(distVec), epsilon);
 				const dir = Vector.div(distVec, dist);
 				let force = Vector.mult(dir, idealNodeDist * idealNodeDist / dist);
 
-				if (this.graph.isConnected(aStr, bStr))
+				if (this.graph.isConnected(aTerm, bTerm))
 				{
-					const stretch = dist - a.radius - b.radius - idealNodeDist;
+					// const stretch = dist - a.radius - b.radius - idealNodeDist;
+					const stretch = dist - idealNodeDist;
 					const springMag = -springCoef * stretch;
 					force = Vector.add(force,
 						Vector.mult(dir, springMag)
@@ -157,21 +143,19 @@ export class Network
 			a.pos = Vector.add(a.pos, a.vel);
 			a.acc = Vector.zero();
 
-			a.svg.setAttribute("r", String(a.radius));
-			a.svg.setAttribute("cx", String(a.pos.x));
-			a.svg.setAttribute("cy", String(a.pos.y));
-			// a.svg.setAttribute("transform", `translate(${a.pos.x},${a.pos.y})`);
+			a.svg.setAttribute("x", String(a.pos.x));
+			a.svg.setAttribute("y", String(a.pos.y));
 		}
 	}
 
 	private updateEdges(): void
 	{
 		let edgePath = "";
-		for (const [aStr, a] of this.nodeMap)
+		for (const [aTerm, a] of this.nodeMap)
 		{
-			for (const bStr of this.graph.getConnectionsOf(aStr))
+			for (const bTerm of this.graph.getConnectionsOf(aTerm))
 			{
-				const b = this.nodeMap.get(bStr)!;
+				const b = this.nodeMap.get(bTerm)!;
 				if (a.pos.x > b.pos.x) continue;
 				edgePath += `M${a.pos.x} ${a.pos.y} L${b.pos.x} ${b.pos.y}`;
 			}

@@ -244,6 +244,51 @@ function computeWidths(t: DiagramTerm, x = 0)
 	}
 }
 
+interface Extrema
+{
+	sx: number;
+	sy: number;
+	lx: number;
+	ly: number;
+}
+function findExtremas(
+	t: DiagramTerm,
+	ext: Extrema = {
+		sx: Infinity,
+		sy: Infinity,
+		lx: -Infinity,
+		ly: -Infinity,
+	}
+)
+{
+	switch (t.type)
+	{
+		case "ABSTRACTION":
+			ext.sx = Math.min(ext.sx, t.x1!, t.x2!);
+			ext.lx = Math.max(ext.lx, t.x1!, t.x2!);
+			ext.sy = Math.min(ext.sy, t.y1!, t.y2!);
+			ext.ly = Math.max(ext.ly, t.y1!, t.y2!);
+			findExtremas(t.body);
+			break;
+		case "APPLICATION":
+			ext.sx = Math.min(ext.sx, t.x1!, t.x2!);
+			ext.lx = Math.max(ext.lx, t.x1!, t.x2!);
+			ext.sy = Math.min(ext.sy, t.y!);
+			ext.ly = Math.max(ext.ly, t.y!);
+			findExtremas(t.left);
+			findExtremas(t.right);
+			break;
+		case "VARIABLE":
+			ext.sx = Math.min(ext.sx, t.x!);
+			ext.lx = Math.max(ext.lx, t.x!);
+			ext.sy = Math.min(ext.sy, t.y1!, t.y2!);
+			ext.ly = Math.max(ext.ly, t.y1!, t.y2!);
+			break;
+	}
+
+	return ext;
+}
+
 function getTreeSize(tree: DiagramTerm): [number, number]
 {
 	const height = findExtremeTerm(tree, "LEFT").y2 ?? 0;
@@ -381,6 +426,7 @@ function buildPath(tree: DiagramTerm): SVGElement
 		stroke: "black",
 		width: width,
 		height: height,
+		transform: `translate(${-width / 2},${-height / 2})`,
 		"stroke-width": style.linewidth,
 		"stroke-linecap": "butt",
 	});

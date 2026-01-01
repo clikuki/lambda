@@ -1,4 +1,4 @@
-import { code } from "./lambda";
+import { code } from "./lambda.js";
 
 export class Expr
 {
