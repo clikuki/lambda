@@ -48,6 +48,7 @@ export class LambdaEval
 					reduxPts.push(term);
 				}
 				this.findReductionPoints(term.left, reduxPts);
+				this.findReductionPoints(term.right, reduxPts);
 				break;
 
 			case "ABSTRACTION":
