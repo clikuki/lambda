@@ -191,27 +191,26 @@ export function stringifyLambda(
 	mapping = new Map<ID, string>(),
 ): string
 {
-	let str;
 	switch (term.type)
 	{
 		case "ABSTRACTION":
 			let params = "";
 			let t = term as Term;
+			let innerDep = depth;
 			while (t.type === "ABSTRACTION")
 			{
-				mapping.set(t.param, String(depth++));
+				mapping.set(t.param, String(innerDep++));
 				params += `${FUNC_CHAR}`
 				t = t.body;
 			}
-			const body = stringifyLambda(t, depth--, mapping);
-			str = `${params} ${body}`;
-			if (!depth) return str;
-			else return `(${str})`;
+			const body = stringifyLambda(t, innerDep--, mapping);
+			return `${params} ${body}`;
 		case "APPLICATION":
-			str = `${stringifyLambda(term.left, depth, mapping)} `;
-			const right = stringifyLambda(term.right, depth, mapping);
-			if (term.right.type === "APPLICATION") return str + `(${right})`;
-			else return str + right;
+			let left = stringifyLambda(term.left, depth, mapping);
+			let right = stringifyLambda(term.right, depth, mapping);
+			if (term.left.type === "ABSTRACTION") left = `(${left})`;
+			if (term.right.type !== "VARIABLE") right = `(${right})`;
+			return `${left} ${right}`;
 		case "VARIABLE":
 			let char = mapping.get(term.id);
 			if (!char)
@@ -279,7 +278,6 @@ export function parseLambda(
 			}
 
 			const varDep = +varStr;
-			console.log(varDep, varStr);
 			if (!Number.isInteger(varDep)) throw new Error("Invalid variable reference");
 			const id = paramList[varDep] ?? IDGen();
 			const variable: Term = {
@@ -305,6 +303,18 @@ export function parseLambda(
 	}
 
 	if (!left) throw "Cannot parse empty string";
+	else if (right)
+	{
+		// Group a and b into an application
+		left = {
+			type: "APPLICATION",
+			left,
+			right,
+			id: IDGen(),
+		};
+		right = null;
+	}
+
 	return left;
 }
 
