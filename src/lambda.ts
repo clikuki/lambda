@@ -188,7 +188,7 @@ export function code(
 export function stringifyLambda(
 	term: Term,
 	depth = 0,
-	mapping = new Map<ID, string>(),
+	mapping = new Map<ID, number>(),
 ): string
 {
 	switch (term.type)
@@ -199,7 +199,7 @@ export function stringifyLambda(
 			let innerDep = depth;
 			while (t.type === "ABSTRACTION")
 			{
-				mapping.set(t.param, String(innerDep++));
+				mapping.set(t.param, innerDep++);
 				params += `${FUNC_CHAR}`
 				t = t.body;
 			}
@@ -212,13 +212,8 @@ export function stringifyLambda(
 			if (term.right.type !== "VARIABLE") right = `(${right})`;
 			return `${left} ${right}`;
 		case "VARIABLE":
-			let char = mapping.get(term.id);
-			if (!char)
-			{
-				char = "-1";
-				mapping.set(term.id, char);
-			}
-			return char;
+			const symDep = mapping.get(term.id) ?? -1;
+			return String(depth - symDep - 1);
 	}
 }
 
@@ -284,9 +279,9 @@ export function parseLambda(
 			// Avoid skipping last char in outer loop
 			if (char !== " ") i--;
 
-			const varDep = +varStr;
-			if (!Number.isInteger(varDep)) throw new Error("Invalid variable reference");
-			const id = paramList[varDep] ?? IDGen();
+			const varDist = +varStr;
+			if (!Number.isInteger(varDist)) throw new Error("Invalid variable reference");
+			const id = paramList[depth - varDist - 1] ?? IDGen();
 			const variable: Term = {
 				type: "VARIABLE",
 				id,

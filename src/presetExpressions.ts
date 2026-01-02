@@ -3,11 +3,11 @@ import { code } from "./lambda.js";
 export class Expr
 {
 	// Church Boolean
-	static TRUE = "@x.@y.x";
-	static FALSE = "@x.@y.y";
-	static NOT = code`@f.f${this.FALSE}${this.TRUE}`;
-	static OR = "@f.@g.ffg";
-	static AND = "@f.@g.fgf";
+	static TRUE = "@@ 1";
+	static FALSE = "@@ 0";
+	static NOT = code`@ 0 ${this.FALSE} ${this.TRUE}`;
+	static OR = "@@ 1 1 0";
+	static AND = "@@ 1 0 1";
 
 	// Church Numerals
 	static numeral(n: number): string
@@ -19,20 +19,20 @@ export class Expr
 		for (let i = n; i > 0; i--)
 		{
 			// Don't parenthesize inner most application
-			if (i === 1) start += "f";
+			if (i === 1) start += "1";
 			else
 			{
-				start += "f(";
+				start += "1(";
 				end += ")";
 			}
 		}
 
-		return `@f.@x.${start}x${end}`;
+		return `@@ ${start} 0 ${end}`;
 	}
-	static SUCC = "@n.@f.@x.f(nfx)";
-	static ADD = "@m.@n.@f.@x.mf(nfx)";
-	static MULT = "@m.@n.@f.m(nf)";
-	static EXP = "@b.@n.nb";
-	static PRED = "@n.@f.@x.n(@g.@h.h(gf))(@u.x)(@u.u)";
-	static SUB = code`@m.@n.n${this.PRED}m`;
+	static SUCC = "@@@ 1 (2 1 0)";
+	static ADD = "@@@@ 3 1 (2 1 0)";
+	static MULT = "@@@ 2 (1 0)";
+	static EXP = "@@ 0 1";
+	static PRED = "@@@ 2 (@@ 0 (1 3)) (@ 1) (@ 0)";
+	static SUB = code`@@ 0 ${this.PRED} 1`;
 }
