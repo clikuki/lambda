@@ -28,7 +28,7 @@ export interface Replacer
 	at: Term[];
 }
 
-export const func_char = "@";
+export const FUNC_CHAR = "@";
 
 export class LambdaEval
 {
@@ -200,7 +200,7 @@ export function stringifyLambda(
 			while (t.type === "ABSTRACTION")
 			{
 				mapping.set(t.param, String(depth++));
-				params += `${func_char}`
+				params += `${FUNC_CHAR}`
 				t = t.body;
 			}
 			const body = stringifyLambda(t, depth--, mapping);
@@ -225,32 +225,83 @@ export function stringifyLambda(
 
 export function parseLambda(
 	code: string,
-	min = 0,
-	max = code.length,
-	mapping = new Map<string, ID>(),
+	from = 0,
+	to = code.length,
+	depth = 0,
+	paramList: ID[] = [],
 	IDGen = getID(),
 ): Term
 {
 	let left: Term | null = null;
 	let right: Term | null = null;
-	for (let i = min; i < max; i++)
+	let i = from;
+	while (i < to)
 	{
-		const char = code[i];
+		let char = code[i++];
 		if (char === " ") continue;
+		if (char === FUNC_CHAR)
+		{
+			const param = IDGen();
+			const localList = Array.from(paramList);
+			localList.push(param);
 
+			const body = parseLambda(code, i, to, depth + 1, localList, IDGen);
+			const abstraction: Abstraction = {
+				type: "ABSTRACTION",
+				id: IDGen(),
+				param,
+				body
+			}
 
-	}
+			if (!left) left = abstraction;
+			else right = abstraction;
 
-	if (right)
-	{
-		// Group a and b into an application
-		left = {
-			type: "APPLICATION",
-			left,
-			right,
-			id: IDGen(),
-		};
-		right = null;
+			break;
+		} else if (char === "(")
+		{
+			// Perform parse within bracket group
+			const end = findBracketPair(code, i);
+			let term = parseLambda(code, i, end, depth, paramList, IDGen);
+
+			if (!left) left = term;
+			else right = term;
+
+			i = end + 1;
+		} else
+		{
+			// Start of variable reference, search ahead
+			let varStr = char;
+			while (i < to)
+			{
+				char = code[i++];
+				if (Number.isNaN(+char) || char === " ") break;
+				varStr += char;
+			}
+
+			const varDep = +varStr;
+			console.log(varDep, varStr);
+			if (!Number.isInteger(varDep)) throw new Error("Invalid variable reference");
+			const id = paramList[varDep] ?? IDGen();
+			const variable: Term = {
+				type: "VARIABLE",
+				id,
+			};
+
+			if (!left) left = variable;
+			else right = variable;
+		}
+
+		if (right)
+		{
+			// Group a and b into an application
+			left = {
+				type: "APPLICATION",
+				left,
+				right,
+				id: IDGen(),
+			};
+			right = null;
+		}
 	}
 
 	if (!left) throw "Cannot parse empty string";
@@ -258,7 +309,7 @@ export function parseLambda(
 }
 
 type BracketGroup = (BracketGroup | string)[];
-export function bracketer(
+function bracketer(
 	str: string,
 ): BracketGroup
 {
