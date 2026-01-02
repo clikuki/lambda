@@ -172,7 +172,7 @@ export class LambdaEval
 
 export function code(
 	strings: TemplateStringsArray,
-	...values: string[]
+	...values: (string | number)[]
 ): string
 {
 	let str = "";
@@ -182,7 +182,7 @@ export function code(
 		str += `(${values[i]})`;
 	}
 	str += strings.at(-1);
-	return str.replaceAll(" ", "");
+	return str;
 }
 
 export function stringifyLambda(
@@ -234,8 +234,11 @@ export function parseLambda(
 	let left: Term | null = null;
 	let right: Term | null = null;
 	let i = from;
+	let lim = 1000;
 	while (i < to)
 	{
+		if (lim-- < 0) throw new Error("Could not escape outer loop ");
+		// console.log(i, `: "${code[i]}" | OUTER`)
 		let char = code[i++];
 		if (char === " ") continue;
 		if (char === FUNC_CHAR)
@@ -270,12 +273,16 @@ export function parseLambda(
 		{
 			// Start of variable reference, search ahead
 			let varStr = char;
-			while (i < to)
+			while (i <= to)
 			{
+				// console.log(i, `: ${code[i]} | INNER`);
 				char = code[i++];
 				if (Number.isNaN(+char) || char === " ") break;
 				varStr += char;
 			}
+
+			// Avoid skipping last char in outer loop
+			if (char !== " ") i--;
 
 			const varDep = +varStr;
 			if (!Number.isInteger(varDep)) throw new Error("Invalid variable reference");
@@ -289,6 +296,7 @@ export function parseLambda(
 			else right = variable;
 		}
 
+		// console.log("BEFORE", left, right);
 		if (right)
 		{
 			// Group a and b into an application
@@ -300,12 +308,14 @@ export function parseLambda(
 			};
 			right = null;
 		}
+		// console.log("AFTER", left, right);
 	}
 
 	if (!left) throw "Cannot parse empty string";
 	else if (right)
 	{
 		// Group a and b into an application
+		// console.log("BEFORE", left, right);
 		left = {
 			type: "APPLICATION",
 			left,
@@ -313,13 +323,15 @@ export function parseLambda(
 			id: IDGen(),
 		};
 		right = null;
+		// console.log("AFTER", left, right);
 	}
+	// else console.log("FINAL", left, right);
 
 	return left;
 }
 
 type BracketGroup = (BracketGroup | string)[];
-function bracketer(
+export function bracketer(
 	str: string,
 ): BracketGroup
 {
