@@ -225,81 +225,70 @@ export function stringifyLambda(
 
 export function parseLambda(
 	code: string,
+	min = 0,
+	max = code.length,
 	mapping = new Map<string, ID>(),
 	IDGen = getID(),
 ): Term
 {
 	let left: Term | null = null;
 	let right: Term | null = null;
-	for (let i = 0; i < code.length; i++)
+	for (let i = min; i < max; i++)
 	{
 		const char = code[i];
-		if (char === " ") throw SyntaxError("No spaces allowed in code string");
-		if (char === func_char)
-		{
-			// abstraction declaration
-			const start = i + 3;
-			const end = code.length;
+		if (char === " ") continue;
 
-			const paramChar = code[i + 1];
-			const param = IDGen();
-			const localMapping = new Map(mapping);
-			localMapping.set(paramChar, param);
 
-			// All characters at this point must be consumed
-			const body = parseLambda(code.slice(start, end), localMapping);
-			const abstraction: Abstraction = {
-				type: "ABSTRACTION",
-				param,
-				body,
-				id: IDGen(),
-			};
+	}
 
-			if (!left) left = abstraction;
-			else right = abstraction;
-
-			i = end;
-		} else if (char === "(")
-		{
-			// Perform parse within bracket group, this usually occurs before abstraction declarations
-			const start = i + 1;
-			const end = findBracketPair(code, i);
-
-			let term = parseLambda(code.slice(start, end), mapping);
-			if (!left) left = term;
-			else right = term;
-
-			i = end;
-		} else
-		{
-			// Get corresponding ID of variable
-			const id = mapping.get(char) ?? IDGen();
-			if (!mapping.has(char)) mapping.set(char, id);
-
-			// Add single character as variable
-			const variable: Term = {
-				type: "VARIABLE",
-				id,
-			};
-			if (!left) left = variable;
-			else right = variable;
-		}
-
-		if (right)
-		{
-			// Group a and b into an application
-			left = {
-				type: "APPLICATION",
-				left,
-				right,
-				id: IDGen(),
-			};
-			right = null;
-		}
+	if (right)
+	{
+		// Group a and b into an application
+		left = {
+			type: "APPLICATION",
+			left,
+			right,
+			id: IDGen(),
+		};
+		right = null;
 	}
 
 	if (!left) throw "Cannot parse empty string";
 	return left;
+}
+
+type BracketGroup = (BracketGroup | string)[];
+export function bracketer(
+	str: string,
+): BracketGroup
+{
+	const rootGroup: BracketGroup = [];
+	const groups = [rootGroup];
+	let workingGroupIndex = 0;
+
+	for (let i = 0; i < str.length; i++)
+	{
+		const char = str[i];
+		if (char === "(")
+		{
+			const group = groups[workingGroupIndex++];
+			const newGroup: BracketGroup = [];
+			group.push(newGroup);
+			groups.push(newGroup);
+		}
+		else if (char === ")")
+		{
+			workingGroupIndex--;
+			groups.pop();
+		}
+		else
+		{
+			const group = groups[workingGroupIndex];
+			group.push(char);
+		}
+	}
+
+	return rootGroup;
 }
 
 function findBracketPair(str: string, at: number): number
