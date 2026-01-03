@@ -230,19 +230,22 @@ export function parseLambda(
 	let right: Term | null = null;
 	let i = from;
 	let lim = 1000;
+	let char;
 	while (i < to)
 	{
 		if (lim-- < 0) throw new Error("Could not escape outer loop ");
-		// console.log(i, `: "${code[i]}" | OUTER`)
-		let char = code[i++];
-		if (char === " ") continue;
-		if (char === FUNC_CHAR)
+
+		char = code[i];
+		// console.log(i, `: "${char}" | OUTER`)
+
+		if (char === " ") { } // Empty block to avoid nesting
+		else if (char === FUNC_CHAR)
 		{
 			const param = IDGen();
 			const localList = Array.from(paramList);
 			localList.push(param);
 
-			const body = parseLambda(code, i, to, depth + 1, localList, IDGen);
+			const body = parseLambda(code, i + 1, to, depth + 1, localList, IDGen);
 			const abstraction: Abstraction = {
 				type: "ABSTRACTION",
 				id: IDGen(),
@@ -258,26 +261,27 @@ export function parseLambda(
 		{
 			// Perform parse within bracket group
 			const end = findBracketPair(code, i);
-			let term = parseLambda(code, i, end, depth, paramList, IDGen);
+			// console.log("GROUP", i, end);
+			let term = parseLambda(code, i + 1, end, depth, paramList, IDGen);
 
 			if (!left) left = term;
 			else right = term;
 
-			i = end + 1;
+			// console.log("RETURN", i, end);
+			i = end;
 		} else
 		{
 			// Start of variable reference, search ahead
 			let varStr = char;
-			while (i <= to)
+			let j = i + 1;
+
+			while (j <= to && !(Number.isNaN(+code[j]) || code[j] === " "))
 			{
 				// console.log(i, `: ${code[i]} | INNER`);
-				char = code[i++];
-				if (Number.isNaN(+char) || char === " ") break;
-				varStr += char;
+				varStr += code[j++];
 			}
 
-			// Avoid skipping last char in outer loop
-			if (char !== " ") i--;
+			i = j - 1; // move outer index ahead
 
 			const varDist = +varStr;
 			if (!Number.isInteger(varDist)) throw new Error("Invalid variable reference");
@@ -297,13 +301,15 @@ export function parseLambda(
 			// Group a and b into an application
 			left = {
 				type: "APPLICATION",
-				left,
+				left: left!,
 				right,
 				id: IDGen(),
 			};
 			right = null;
 		}
 		// console.log("AFTER", left, right);
+
+		i++;
 	}
 
 	if (!left) throw "Cannot parse empty string";
@@ -365,6 +371,7 @@ function findBracketPair(str: string, at: number): number
 	for (let i = at + 1; i < str.length; i++)
 	{
 		const char = str[i];
+		// console.log(i, char, count);
 		if (char === "(") count++;
 		else if (char === ")" && !--count) return i;
 	}
