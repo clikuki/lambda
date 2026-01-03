@@ -140,8 +140,7 @@ export class LambdaEval
 		part: Term,
 	): Term
 	{
-		// Assume use-case refers to only one ref occurence in tree
-		if (term === at) return part;
+		if (term === at) return this.clone(part);
 
 		switch (term.type)
 		{

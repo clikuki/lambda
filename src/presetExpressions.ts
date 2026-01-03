@@ -29,10 +29,10 @@ export class Expr
 
 		return `@@ ${start} 0 ${end}`;
 	}
-	static SUCC = "@@@ 1 (2 1 0)";
-	static ADD = "@@@@ 3 1 (2 1 0)";
-	static MULT = "@@@ 2 (1 0)";
+	static SUCC = "@@@ 1(2 1 0)";
+	static ADD = "@@@@ 3 1(2 1 0)";
+	static MULT = "@@@ 2(1 0)";
 	static EXP = "@@ 0 1";
-	static PRED = "@@@ 2 (@@ 0 (1 3)) (@ 1) (@ 0)";
-	static SUB = code`@@ 0 ${this.PRED} 1`;
+	static PRED = "@@@ 2(@@ 0 (1 3))(@ 1)(@ 0)";
+	static SUB = code`@@ 0${this.PRED}1`;
 }

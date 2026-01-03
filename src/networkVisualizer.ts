@@ -1,5 +1,5 @@
 import { Graph } from "./graph.js";
-import { Term } from "./lambda.js";
+import { parseLambda } from "./lambda.js";
 import { constructDiagram } from "./tromp.js";
 import { createSVG } from "./utils.js";
 import { Vector } from "./vector.js";
@@ -21,11 +21,11 @@ export class Network
 	public constants = {
 		epsilon: 0.0001,
 		idealNodeDist: 6,
-		springCoef: 0.2,
-		dampingCoef: 0.9,
+		springCoef: 0.3,
+		dampingCoef: 0.8,
 	}
 
-	private nodeMap = new Map<Term, NodeData>();
+	private nodeMap = new Map<string, NodeData>();
 
 	private style = {
 		linewidth: 2,
@@ -37,7 +37,7 @@ export class Network
 
 	constructor(
 		container: HTMLElement,
-		private graph: Graph<Term>
+		private graph: Graph<string>
 	)
 	{
 		this.worldSVG = createSVG("svg", {
@@ -60,24 +60,39 @@ export class Network
 
 	public renewStateFromGraph(): void
 	{
-		for (const [nodeTerm,] of this.graph.getAllConnections())
+		// const totalCenter = this.getBarycenter();
+		for (const [nodeStr, conn] of this.graph.getAllConnections())
 		{
-			let node = this.nodeMap.get(nodeTerm);
+			let node = this.nodeMap.get(nodeStr);
 			if (!node)
 			{
-				// const radius = Math.random() * 120 + 30;
-				const svg = constructDiagram(nodeTerm);
-				const radius = Math.max(+svg.getAttribute("width")!, +svg.getAttribute("height")!);
-				// const radius = 133;
-				const pos = Vector.add(
-					new Vector(innerWidth / 2, innerHeight / 2),
-					Vector.from(Math.random() * Math.PI * 2, Math.random() * 50),
-				);
+				const term = parseLambda(nodeStr);
+				const svg = constructDiagram(term);
+				const width = +svg.getAttribute("width")!;
+				const height = +svg.getAttribute("height")!;
+				const radius = Math.max(width, height);
 				const vel = Vector.zero();
 				const acc = Vector.zero();
 
+				// Place node close to its adjacents
+				const brownian = Vector.from(Math.random() * Math.PI * 2, 20);
+				let pos;
+				if (conn.size)
+				{
+					const strings = Array.from(conn);
+					const nodes = strings.map(s => this.nodeMap.get(s)!);
+					const adjCenter = this.getBarycenter(nodes);
+					pos = adjCenter;
+				}
+				else
+				{
+					pos = new Vector(innerWidth / 2, innerHeight / 2);
+				}
+
+				pos = Vector.add(pos, brownian);
+
 				node = { radius, pos, vel, acc, svg };
-				this.nodeMap.set(nodeTerm, node);
+				this.nodeMap.set(nodeStr, node);
 				this.worldSVG.append(node.svg);
 			}
 		}
@@ -158,7 +173,16 @@ export class Network
 			{
 				const b = this.nodeMap.get(bTerm)!;
 				if (a.pos.x > b.pos.x) continue;
-				edgePath += `M${a.pos.x} ${a.pos.y} L${b.pos.x} ${b.pos.y}`;
+				const distVec = Vector.sub(b.pos, a.pos);
+				const aEdge = Vector.add(
+					Vector.setMag(distVec, a.radius * 0.5),
+					a.pos,
+				);
+				const bEdge = Vector.add(
+					Vector.setMag(distVec, -b.radius * 0.5),
+					b.pos,
+				);
+				edgePath += `M${aEdge.x} ${aEdge.y} L${bEdge.x} ${bEdge.y}`;
 			}
 		}
 
@@ -170,6 +194,24 @@ export class Network
 		node.acc = Vector.add(
 			force,
 			node.acc,
+		);
+	}
+
+	private getBarycenter(
+		nodes: NodeData[] = Array.from(this.nodeMap.values())
+	): Vector
+	{
+		let xNumerator = 0, yNumerator = 0;
+
+		for (const a of nodes)
+		{
+			xNumerator += a.pos.x;
+			yNumerator += a.pos.y;
+		}
+
+		return new Vector(
+			xNumerator / nodes.length,
+			yNumerator / nodes.length,
 		);
 	}
 }

@@ -24,7 +24,10 @@ export class Graph<T>
 	/** Add node to graph without any connections */
 	public add(node: T): void
 	{
-		this.map.set(node, new Set());
+		if (!this.map.has(node))
+		{
+			this.map.set(node, new Set());
+		}
 	}
 
 	public connect(from: T, to: T): void
