@@ -20,7 +20,8 @@ export class Network
 
 	public constants = {
 		epsilon: 0.0001,
-		idealNodeDist: 6,
+		// idealNodeDist: 6,
+		idealNodeDist: 50,
 		springCoef: 0.3,
 		dampingCoef: 0.8,
 	}
@@ -70,7 +71,7 @@ export class Network
 				const svg = constructDiagram(term);
 				const width = +svg.getAttribute("width")!;
 				const height = +svg.getAttribute("height")!;
-				const radius = Math.max(width, height);
+				const radius = Math.hypot(width, height);
 				const vel = Vector.zero();
 				const acc = Vector.zero();
 
@@ -124,8 +125,8 @@ export class Network
 
 				if (this.graph.isConnected(aTerm, bTerm))
 				{
-					const stretch = dist - a.radius - b.radius - idealNodeDist;
-					// const stretch = dist - idealNodeDist;
+					// const stretch = dist - a.radius - b.radius - idealNodeDist;
+					const stretch = dist - idealNodeDist;
 					const springMag = -springCoef * stretch;
 					force = Vector.add(force,
 						Vector.mult(dir, springMag)
