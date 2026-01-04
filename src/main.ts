@@ -13,13 +13,16 @@ import
 const graph = new Graph<string>();
 const LE = new LambdaEval();
 const seed = //
-	code`${Expr.ADD}${Expr.numeral(1)}${Expr.numeral(1)}`;
+	// code`${Expr.ADD}${Expr.numeral(1)}${Expr.numeral(1)}`;
+	// code`${Expr.EXP}${Expr.numeral(2)}${Expr.numeral(2)}`;
+	code`${Expr.PRED}${Expr.numeral(2)}`;
+// code`${Expr.SUB}${Expr.numeral(4)}${Expr.numeral(2)}`;
 // "(@@ 1) (@0) (@0)";
-// "(@0 0)(((((@0 0)))))";
+// "(@0 0 0)(@0 0 0)";
 // "@@@@@1(2 4)@3(1 0)5";
 
 /*
-# LEFT-SIDE REDUX
+# LEFT-SIDE REDUX OF `ADD 1 1`
 (@@@@ 3 1 (2 1 0)) (@@ 1 0) (@@ 1 0)
 (@@@ (@@ 1 0) 1 (2 1 0)) (@@ 1 0)
 (@@@ (@ 2 0) (2 1 0)) (@@ 1 0)
@@ -32,6 +35,7 @@ const seed = //
 const terms = [parseLambda(seed)];
 graph.add(stringifyLambda(terms[0]));
 
+// let tripped = false;
 function lambdaExpander(): boolean
 {
 	if (!terms.length) return false;
@@ -46,9 +50,15 @@ function lambdaExpander(): boolean
 		for (const redux of reduxes)
 		{
 			const reduxed = LE.performReduction(term, redux);
+			// console.log(Array(20).fill("=").join(""))
 			const bStr = stringifyLambda(reduxed);
+			// if (!tripped && bStr.includes("-2"))
+			// {
+			// 	console.log(JSON.stringify(term, null, 1));
+			// 	console.log(JSON.stringify(reduxed, null, 1));
+			// }
 			graph.biconnect(aStr, bStr);
-			newTerms.push(reduxed);
+			newTerms.push(parseLambda(bStr));
 		}
 	}
 
@@ -83,9 +93,8 @@ try
 
 (function continualExpander()
 {
-	lambdaExpander() && setTimeout(() => continualExpander(), 1000);
+	lambdaExpander() && setTimeout(() => continualExpander(), 300);
 })()
-// lambdaExpander();
 
 // @ts-expect-error
 window.network = network;

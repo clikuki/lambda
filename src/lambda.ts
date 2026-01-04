@@ -4,6 +4,7 @@ interface LambdaNode
 {
 	type: string;
 	id: ID;
+	oldID?: ID;
 }
 export interface Abstraction extends LambdaNode
 {
@@ -61,110 +62,66 @@ export class LambdaEval
 
 	public performReduction(root: Term, reduxPt: Application): Term
 	{
-		const { left, right } = reduxPt;
-		if (left.type !== "ABSTRACTION") throw new Error(
-			"Left side of application must be an abstraction"
-		);
-
-		const newPart = this.substitute(left.body, left.param, right);
-		return this.cloneWithSwap(root, reduxPt, newPart);
+		return this.cloner(root, reduxPt);
 	}
 
-	private substitute(
+	private cloner(
 		term: Term,
-		id: ID,
-		to: Term,
+		reduxPt: Application | null = null,
+		sub: [ID, Term] | null = null,
+		mapping = new Map<ID, ID>(),
+		IDGen = getID(),
 	): Term
 	{
+		if (term === reduxPt)
+		{
+			const { left, right } = reduxPt;
+			if (left.type !== "ABSTRACTION") throw new Error(
+				"Left side of application must be an abstraction"
+			);
+
+			return this.cloner(
+				left.body, null, [left.param, right], mapping, IDGen
+			);
+		}
+
 		if (term.type === "VARIABLE")
 		{
-			if (term.id === id) return this.clone(to);
+			if (sub && term.id === sub[0]) return this.cloner(
+				sub[1], null, null, mapping, IDGen
+			);
+
+			let newID = mapping.get(term.id);
+			if (!newID) mapping.set(term.id, newID = IDGen());
+
 			return {
 				type: "VARIABLE",
-				id: term.id,
+				id: newID,
+				oldID: term.id,
 			};
 		}
 		else if (term.type === "APPLICATION")
 		{
 			return {
 				type: "APPLICATION",
-				id: term.id,
-				left: this.substitute(term.left, id, to),
-				right: this.substitute(term.right, id, to),
+				id: IDGen(),
+				oldID: term.id,
+				left: this.cloner(term.left, reduxPt, sub, mapping, IDGen),
+				right: this.cloner(term.right, reduxPt, sub, mapping, IDGen),
 			};
 		}
-		else if (term.param !== id)
+		else
 		{
+			let newParam = mapping.get(term.param);
+			if (!newParam) mapping.set(term.param, newParam = IDGen());
+
 			return {
 				type: "ABSTRACTION",
-				id: term.id,
-				param: term.param,
-				body: this.substitute(term.body, id, to),
+				id: IDGen(),
+				oldID: term.id,
+				param: newParam,
+				body: this.cloner(term.body, reduxPt, sub, mapping, IDGen),
 			};
-		}
-		// Is abstraction, but shadows the term that we are trying to substitute
-		else return this.clone(term);
-	}
-
-	private clone(term: Term): Term
-	{
-		switch (term.type)
-		{
-			case "VARIABLE":
-				return {
-					id: term.id,
-					type: "VARIABLE",
-				};
-			case "APPLICATION":
-				return {
-					id: term.id,
-					type: "APPLICATION",
-					left: this.clone(term.left),
-					right: this.clone(term.right),
-				};
-			case "ABSTRACTION":
-				return {
-					id: term.id,
-					type: "ABSTRACTION",
-					param: term.param,
-					body: this.clone(term.body),
-				};
-			default:
-				throw new Error("Invalid node type")
-		}
-	}
-
-	private cloneWithSwap(
-		term: Term,
-		at: Term,
-		part: Term,
-	): Term
-	{
-		if (term === at) return this.clone(part);
-
-		switch (term.type)
-		{
-			case "VARIABLE":
-				return {
-					id: term.id,
-					type: "VARIABLE",
-				};
-			case "APPLICATION":
-				return {
-					id: term.id,
-					type: "APPLICATION",
-					left: this.cloneWithSwap(term.left, at, part),
-					right: this.cloneWithSwap(term.right, at, part),
-				};
-			case "ABSTRACTION":
-				return {
-					id: term.id,
-					type: "ABSTRACTION",
-					param: term.param,
-					body: this.cloneWithSwap(term.body, at, part),
-				};
-			default:
-				throw new Error("Invalid node type")
 		}
 	}
 }
@@ -212,6 +169,12 @@ export function stringifyLambda(
 			return `${left} ${right}`;
 		case "VARIABLE":
 			const symDep = mapping.get(term.id) ?? -1;
+			if (depth - symDep - 1 < 0)
+			{
+				console.log(depth, symDep, depth - symDep - 1)
+				console.log(term);
+				console.log(mapping);
+			}
 			return String(depth - symDep - 1);
 	}
 }
