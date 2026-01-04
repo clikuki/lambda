@@ -9,6 +9,7 @@ import
 	stringifyLambda,
 	Term
 } from "./lambda.js";
+import { Vector } from "./vector.js";
 
 const graph = new Graph<string>();
 const LE = new LambdaEval();
@@ -79,6 +80,55 @@ const network = new Network(
 	graph,
 );
 
+const mouse = {
+	buttons: {
+		mid: 4,
+	},
+
+	pos: Vector.zero(),
+	prevPos: Vector.zero(),
+	pressed: 0,
+
+	pxWheelScale: 0.001,
+	lineWheelScale: 0.2,
+
+	isDown(btn: number): boolean
+	{
+		return (this.pressed & btn) !== 0;
+	}
+}
+network.worldSVG.addEventListener("mousedown", (e) => { mouse.pressed = e.buttons; });
+network.worldSVG.addEventListener("mouseup", (e) => { mouse.pressed = e.buttons; });
+network.worldSVG.addEventListener("mousemove", (e) =>
+{
+	const pos = network.worldSVG.getBoundingClientRect();
+	mouse.prevPos = mouse.pos;
+	mouse.pos = Vector.sub(new Vector(e.x, e.y), pos);
+
+	if (mouse.isDown(mouse.buttons.mid))
+	{
+		const dp = Vector.sub(mouse.pos, mouse.prevPos);
+		network.moveBy(dp);
+	}
+});
+network.worldSVG.addEventListener("wheel", (e) =>
+{
+	let ds;
+	switch (e.deltaMode)
+	{
+		case 0x00:
+			ds = e.deltaY * mouse.pxWheelScale;
+			break;
+		case 0x01:
+		case 0x02:
+		default:
+			ds = Math.sign(e.deltaY) * mouse.lineWheelScale;
+			break;
+	}
+
+	network.scaleBy(ds, mouse.pos);
+})
+
 try
 {
 	requestAnimationFrame(function loop()
@@ -93,7 +143,7 @@ try
 
 (function continualExpander()
 {
-	lambdaExpander() && setTimeout(() => continualExpander(), 300);
+	lambdaExpander() && setTimeout(() => continualExpander(), 100);
 })()
 
 // @ts-expect-error

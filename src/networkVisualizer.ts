@@ -18,6 +18,10 @@ export class Network
 	public worldSVG: SVGElement;
 	public edgePathsSVG: SVGElement;
 
+	public scale = 1;
+	public fullView: Vector;
+	public view: Vector;
+
 	public constants = {
 		epsilon: 0.0001,
 		// idealNodeDist: 6,
@@ -27,6 +31,7 @@ export class Network
 	}
 
 	private nodeMap = new Map<string, NodeData>();
+	private pos = Vector.zero();
 
 	private style = {
 		linewidth: 2,
@@ -41,10 +46,13 @@ export class Network
 		private graph: Graph<string>
 	)
 	{
+		this.fullView = new Vector(innerWidth, innerHeight);
+		this.view = Vector.div(this.fullView, this.scale);
+
 		this.worldSVG = createSVG("svg", {
 			width: innerWidth,
 			height: innerHeight,
-			viewBox: `0 0 ${innerWidth} ${innerHeight}`,
+			viewBox: `${this.pos.x} ${this.pos.y} ${this.view.x} ${this.view.y}`,
 			stroke: "black",
 			"stroke-width": this.style.linewidth,
 			"stroke-linecap": "butt",
@@ -104,6 +112,38 @@ export class Network
 		this.handleInterForces();
 		this.updateNode();
 		this.updateEdges();
+	}
+
+	public moveBy(dp: Vector): void
+	{
+		this.pos = Vector.sub(this.pos, Vector.mult(dp, this.scale));
+		this.worldSVG.setAttribute(
+			"viewBox",
+			`${this.pos.x} ${this.pos.y} ${this.view.x} ${this.view.y}`,
+		);
+	}
+
+	public scaleBy(ds: number, center: Vector): void
+	{
+		this.scale = Math.max(0.1, this.scale + ds);
+
+		const oldView = this.view;
+		this.view = Vector.mult(this.fullView, this.scale);
+
+		const proportion = Vector.sub(this.fullView, center);
+		proportion.x /= this.fullView.x;
+		proportion.y /= this.fullView.y;
+
+		const offset = Vector.sub(this.view, oldView);
+		offset.x *= 1 - proportion.x;
+		offset.y *= 1 - proportion.y;
+
+		this.pos = Vector.sub(this.pos, offset);
+
+		this.worldSVG.setAttribute(
+			"viewBox",
+			`${this.pos.x} ${this.pos.y} ${this.view.x} ${this.view.y}`,
+		);
 	}
 
 	private handleInterForces(): void
