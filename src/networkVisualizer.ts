@@ -84,7 +84,13 @@ export class Network
 				const acc = Vector.zero();
 
 				// Place node close to its adjacents
-				const brownian = Vector.from(Math.random() * Math.PI * 2, 20);
+				// Randomness required to avoid axis explosion
+				const offset = Vector.from(
+					// Bias expansions downwards
+					Math.random() * Math.PI / 4 + Math.PI * 3 / 8,
+					100
+				);
+				// const offset = new Vector(Math.random(), 50);
 				let pos;
 				if (conn.size)
 				{
@@ -98,7 +104,7 @@ export class Network
 					pos = new Vector(innerWidth / 2, innerHeight / 2);
 				}
 
-				pos = Vector.add(pos, brownian);
+				pos = Vector.add(pos, offset);
 
 				node = { radius, pos, vel, acc, svg };
 				this.nodeMap.set(nodeStr, node);
