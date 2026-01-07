@@ -80,34 +80,38 @@ const network = new Network(
 	graph,
 );
 
-const mouse = {
+const inputs = {
 	buttons: {
 		mid: 4,
 	},
+
+	keys: new Map<string, boolean>(),
 
 	pos: Vector.zero(),
 	prevPos: Vector.zero(),
 	pressed: 0,
 
-	pxWheelScale: 0.001,
-	lineWheelScale: 0.2,
+	pxZoomScale: 0.001,
+	lineZoomScale: 0.2,
+	keyZoomScale: 0.1,
+	keyMoveScale: 30,
 
 	isDown(btn: number): boolean
 	{
 		return (this.pressed & btn) !== 0;
 	}
 }
-network.worldSVG.addEventListener("mousedown", (e) => { mouse.pressed = e.buttons; });
-network.worldSVG.addEventListener("mouseup", (e) => { mouse.pressed = e.buttons; });
+network.worldSVG.addEventListener("mousedown", (e) => { inputs.pressed = e.buttons; });
+network.worldSVG.addEventListener("mouseup", (e) => { inputs.pressed = e.buttons; });
 network.worldSVG.addEventListener("mousemove", (e) =>
 {
 	const pos = network.worldSVG.getBoundingClientRect();
-	mouse.prevPos = mouse.pos;
-	mouse.pos = Vector.sub(new Vector(e.x, e.y), pos);
+	inputs.prevPos = inputs.pos;
+	inputs.pos = Vector.sub(new Vector(e.x, e.y), pos);
 
-	if (mouse.isDown(mouse.buttons.mid))
+	if (inputs.isDown(inputs.buttons.mid))
 	{
-		const dp = Vector.sub(mouse.pos, mouse.prevPos);
+		const dp = Vector.sub(inputs.pos, inputs.prevPos);
 		network.moveBy(dp);
 	}
 });
@@ -117,16 +121,25 @@ network.worldSVG.addEventListener("wheel", (e) =>
 	switch (e.deltaMode)
 	{
 		case 0x00:
-			ds = e.deltaY * mouse.pxWheelScale;
+			ds = e.deltaY * inputs.pxZoomScale;
 			break;
 		case 0x01:
 		case 0x02:
 		default:
-			ds = Math.sign(e.deltaY) * mouse.lineWheelScale;
+			ds = Math.sign(e.deltaY) * inputs.lineZoomScale;
 			break;
 	}
 
-	network.scaleBy(ds, mouse.pos);
+	network.scaleBy(ds, inputs.pos);
+})
+
+document.body.addEventListener("keydown", (e) =>
+{
+	inputs.keys.set(e.key, true);
+})
+document.body.addEventListener("keyup", (e) =>
+{
+	inputs.keys.set(e.key, false);
 })
 
 try
@@ -135,6 +148,29 @@ try
 	{
 		network.update();
 		requestAnimationFrame(loop);
+
+		// Handle keyboard controls
+		const moveUp = inputs.keys.get("w") ?? false;
+		const moveDown = inputs.keys.get("s") ?? false;
+		const moveLeft = inputs.keys.get("a") ?? false;
+		const moveRight = inputs.keys.get("d") ?? false;
+		if (moveUp || moveDown || moveLeft || moveRight)
+		{
+			network.moveBy(Vector.mult({
+				x: (+moveLeft + -moveRight),
+				y: (+moveUp + -moveDown),
+			}, inputs.keyMoveScale));
+		}
+
+		const scaleDown = inputs.keys.get("-") ?? inputs.keys.get("_") ?? false;
+		const scaleUp = inputs.keys.get("=") ?? inputs.keys.get("+") ?? false;
+		if (scaleDown || scaleUp)
+		{
+			network.scaleBy((+scaleDown + -scaleUp) * inputs.keyZoomScale, {
+				x: innerWidth / 2,
+				y: innerHeight / 2,
+			});
+		}
 	})
 } catch (error)
 {
