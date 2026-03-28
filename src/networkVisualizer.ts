@@ -11,6 +11,9 @@ interface NodeData
 	pos: Vector;
 	vel: Vector;
 	acc: Vector;
+
+	// Layout
+	layer: number;
 }
 
 export class Network
@@ -70,7 +73,7 @@ export class Network
 	public renewStateFromGraph(): void
 	{
 		// const totalCenter = this.getBarycenter();
-		for (const [nodeStr, conn] of this.graph.getAllConnections())
+		for (const [nodeStr] of this.graph.getAllConnections())
 		{
 			let node = this.nodeMap.get(nodeStr);
 			if (!node)
@@ -90,34 +93,36 @@ export class Network
 					Math.random() * Math.PI / 4 + Math.PI * 3 / 8,
 					100
 				);
-				// const offset = new Vector(Math.random(), 50);
-				let pos;
-				if (conn.size)
-				{
-					const strings = Array.from(conn);
-					const nodes = strings.map(s => this.nodeMap.get(s)!);
-					const adjCenter = this.getBarycenter(nodes);
-					pos = adjCenter;
-				}
-				else
-				{
-					pos = new Vector(innerWidth / 2, innerHeight / 2);
-				}
 
+				// const offset = new Vector(Math.random(), 50);
+				let pos = new Vector(innerWidth / 2, innerHeight / 2);
 				pos = Vector.add(pos, offset);
 
-				node = { radius, pos, vel, acc, svg };
+				node = {
+					radius, pos, vel, acc, svg,
+					layer: -1,
+				};
 				this.nodeMap.set(nodeStr, node);
 				this.worldSVG.append(node.svg);
 			}
 		}
+
+		// Layout
+		this.minimizeLayers();
+
+		// for dev only
+		for (const [, node] of this.nodeMap)
+		{
+			node.pos.x = 100;
+			node.pos.y = node.layer * 100;
+		}
+
+		this.updateNode();
+		this.updateEdges();
 	}
 
 	public update(): void
 	{
-		this.handleInterForces();
-		this.updateNode();
-		this.updateEdges();
 	}
 
 	public moveBy(dp: Vector): void
@@ -152,60 +157,61 @@ export class Network
 		);
 	}
 
-	private handleInterForces(): void
+	private minimizeLayers(): void
 	{
-		const nodes = Array.from(this.nodeMap.entries());
-		const { springCoef, idealNodeDist, epsilon } = this.constants;
-
-		for (let i = 0; i < nodes.length; i++)
+		// clear old layer values
+		for (const node of this.nodeMap.values())
 		{
-			const [aTerm, a] = nodes[i];
-			for (let j = i + 1; j < nodes.length; j++)
+			node.layer = -1;
+		}
+
+		const sourceKey = this.findSourceNodeKey();
+		const source = this.nodeMap.get(sourceKey)!;
+		source.layer = 0;
+
+
+		this.updateLayerIndex(sourceKey);
+	}
+
+	private updateLayerIndex(nodeKey: string): void
+	{
+
+		const node = this.nodeMap.get(nodeKey)!;
+		for (const connKey of this.graph.getConnectionsOf(nodeKey))
+		{
+
+			const conn = this.nodeMap.get(connKey)!;
+			if (conn.layer < node.layer + 1)
 			{
-				const [bTerm, b] = nodes[j];
-
-				const distVec = Vector.sub(a.pos, b.pos);
-				const dist = Math.max(Vector.mag(distVec), epsilon);
-				const dir = Vector.div(distVec, dist);
-				let force = Vector.mult(dir, idealNodeDist * idealNodeDist / dist);
-
-				if (this.graph.isConnected(aTerm, bTerm))
-				{
-					// const stretch = dist - a.radius - b.radius - idealNodeDist;
-					const stretch = dist - idealNodeDist;
-					const springMag = -springCoef * stretch;
-					force = Vector.add(force,
-						Vector.mult(dir, springMag)
-					);
-
-					// Possible: experiment with fructer using target pos
-					// force = Vector.add(force,
-					// 	Vector.mult(dir, dist * dist / -idealNodeDist)
-					// );
-				}
-
-				// if (!Number.isNaN(force.x + force.y))
-				// {
-				// 	console.log(force.x, force.y);
-				// }
-
-				this.applyForce(a, force);
-				force.x *= -1;
-				force.y *= -1;
-				this.applyForce(b, force);
+				conn.layer = node.layer + 1;
+				this.updateLayerIndex(connKey);
 			}
 		}
 	}
 
+	private findSourceNodeKey(): string
+	{
+		const nodeKeys = this.graph.getAllConnections();
+		main: for (const [nodeKey, connKeys] of nodeKeys)
+		{
+			for (const connKey of connKeys)
+			{
+				if (this.graph.isConnected(connKey, nodeKey))
+				{
+					continue main;
+				}
+			}
+
+			return nodeKey;
+		}
+
+		throw new Error("Source node not found");
+	}
+
 	private updateNode(): void
 	{
-		const { dampingCoef } = this.constants;
 		for (const [, a] of this.nodeMap)
 		{
-			a.vel = Vector.mult(Vector.add(a.vel, a.acc), dampingCoef);
-			a.pos = Vector.add(a.pos, a.vel);
-			a.acc = Vector.zero();
-
 			a.svg.setAttribute("x", String(a.pos.x));
 			a.svg.setAttribute("y", String(a.pos.y));
 		}
@@ -222,11 +228,11 @@ export class Network
 				if (a.pos.x > b.pos.x) continue;
 				const distVec = Vector.sub(b.pos, a.pos);
 				const aEdge = Vector.add(
-					Vector.setMag(distVec, a.radius * 0.5),
+					Vector.setMag(distVec, a.radius),
 					a.pos,
 				);
 				const bEdge = Vector.add(
-					Vector.setMag(distVec, -b.radius * 0.5),
+					Vector.setMag(distVec, -b.radius),
 					b.pos,
 				);
 				edgePath += `M${aEdge.x} ${aEdge.y} L${bEdge.x} ${bEdge.y}`;
@@ -234,31 +240,5 @@ export class Network
 		}
 
 		this.edgePathsSVG.setAttribute("d", edgePath);
-	}
-
-	private applyForce(node: NodeData, force: Vector): void
-	{
-		node.acc = Vector.add(
-			force,
-			node.acc,
-		);
-	}
-
-	private getBarycenter(
-		nodes: NodeData[] = Array.from(this.nodeMap.values())
-	): Vector
-	{
-		let xNumerator = 0, yNumerator = 0;
-
-		for (const a of nodes)
-		{
-			xNumerator += a.pos.x;
-			yNumerator += a.pos.y;
-		}
-
-		return new Vector(
-			xNumerator / nodes.length,
-			yNumerator / nodes.length,
-		);
 	}
 }

@@ -17,6 +17,7 @@ const seed = //
 	// code`${Expr.ADD}${Expr.numeral(1)}${Expr.numeral(1)}`;
 	// code`${Expr.EXP}${Expr.numeral(2)}${Expr.numeral(2)}`;
 	code`${Expr.PRED}${Expr.numeral(2)}`;
+// code`${Expr.TRUE} (@ 0) (@@ 0)`;
 // code`${Expr.SUB}${Expr.numeral(4)}${Expr.numeral(2)}`;
 // "(@@ 1) (@0) (@0)";
 // "(@0 0 0)(@0 0 0)";
@@ -51,14 +52,9 @@ function lambdaExpander(): boolean
 		for (const redux of reduxes)
 		{
 			const reduxed = LE.performReduction(term, redux);
-			// console.log(Array(20).fill("=").join(""))
 			const bStr = stringifyLambda(reduxed);
-			// if (!tripped && bStr.includes("-2"))
-			// {
-			// 	console.log(JSON.stringify(term, null, 1));
-			// 	console.log(JSON.stringify(reduxed, null, 1));
-			// }
-			graph.biconnect(aStr, bStr);
+			graph.add(bStr);
+			graph.connect(aStr, bStr);
 			newTerms.push(parseLambda(bStr));
 		}
 	}
@@ -179,7 +175,8 @@ try
 
 (function continualExpander()
 {
-	lambdaExpander() && setTimeout(() => continualExpander(), 100);
+	// lambdaExpander() && setTimeout(() => continualExpander(), 100);
+	setTimeout(() => lambdaExpander() && continualExpander(), 200);
 })()
 
 // @ts-expect-error
