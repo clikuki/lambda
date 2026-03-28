@@ -47,6 +47,7 @@ function lambdaExpander(): boolean
 	{
 		const aStr = stringifyLambda(term);
 		graph.add(aStr);
+		// console.log("From: ", aStr);
 
 		const reduxes = LE.findReductionPoints(term);
 		for (const redux of reduxes)
@@ -56,6 +57,7 @@ function lambdaExpander(): boolean
 			graph.add(bStr);
 			graph.connect(aStr, bStr);
 			newTerms.push(parseLambda(bStr));
+			// console.log("To: ", bStr);
 		}
 	}
 
@@ -142,7 +144,6 @@ try
 {
 	requestAnimationFrame(function loop()
 	{
-		network.update();
 		requestAnimationFrame(loop);
 
 		// Handle keyboard controls
@@ -176,7 +177,10 @@ try
 (function continualExpander()
 {
 	// lambdaExpander() && setTimeout(() => continualExpander(), 100);
-	setTimeout(() => lambdaExpander() && continualExpander(), 200);
+	setTimeout(() =>
+		// [...graph.getAllConnections()].length < 6 &&
+		lambdaExpander() && continualExpander(),
+		200);
 })()
 
 // @ts-expect-error

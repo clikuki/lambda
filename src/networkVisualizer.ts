@@ -6,6 +6,7 @@ import { Vector } from "./vector.js";
 
 interface NodeData
 {
+	key: string;
 	svg: SVGElement;
 	radius: number;
 	pos: Vector;
@@ -61,7 +62,7 @@ export class Network
 			"stroke-linecap": "butt",
 		});
 		this.edgePathsSVG = createSVG("path", {
-			stroke: "gray",
+			stroke: "#aaa",
 		});
 
 		this.worldSVG.append(this.edgePathsSVG);
@@ -72,13 +73,12 @@ export class Network
 
 	public renewStateFromGraph(): void
 	{
-		// const totalCenter = this.getBarycenter();
-		for (const [nodeStr] of this.graph.getAllConnections())
+		for (const [nodeKey] of this.graph.getAllConnections())
 		{
-			let node = this.nodeMap.get(nodeStr);
+			let node = this.nodeMap.get(nodeKey);
 			if (!node)
 			{
-				const term = parseLambda(nodeStr);
+				const term = parseLambda(nodeKey);
 				const svg = constructDiagram(term);
 				const width = +svg.getAttribute("width")!;
 				const height = +svg.getAttribute("height")!;
@@ -99,30 +99,49 @@ export class Network
 				pos = Vector.add(pos, offset);
 
 				node = {
+					key: nodeKey,
 					radius, pos, vel, acc, svg,
 					layer: -1,
 				};
-				this.nodeMap.set(nodeStr, node);
+				this.nodeMap.set(nodeKey, node);
 				this.worldSVG.append(node.svg);
 			}
 		}
 
 		// Layout
-		this.minimizeLayers();
-
-		// for dev only
-		for (const [, node] of this.nodeMap)
-		{
-			node.pos.x = 100;
-			node.pos.y = node.layer * 100;
-		}
-
+		this.setLayers();
+		this.orderLayerNodes();
 		this.updateNode();
 		this.updateEdges();
 	}
 
 	public update(): void
 	{
+	}
+
+	private orderLayerNodes(): void
+	{
+		// Find layers
+		const layers: NodeData[][] = []
+		for (const node of this.nodeMap.values())
+		{
+			const l = node.layer;
+			if (!layers[l]) layers[l] = [node];
+			else layers[l].push(node);
+		}
+
+		// Center them
+		const offset = innerWidth / 2;
+		for (const layer of layers)
+		{
+			const layerLen = layer.length;
+			const layerWidth = layerLen * 200;
+			for (let i = 0; i < layerLen; i++)
+			{
+				const node = layer[i];
+				node.pos.x = i / layerLen * layerWidth - layerWidth / 2 + offset;
+			}
+		}
 	}
 
 	public moveBy(dp: Vector): void
@@ -157,7 +176,7 @@ export class Network
 		);
 	}
 
-	private minimizeLayers(): void
+	private setLayers(): void
 	{
 		// clear old layer values
 		for (const node of this.nodeMap.values())
@@ -169,14 +188,14 @@ export class Network
 		const source = this.nodeMap.get(sourceKey)!;
 		source.layer = 0;
 
-
 		this.updateLayerIndex(sourceKey);
 	}
 
 	private updateLayerIndex(nodeKey: string): void
 	{
-
 		const node = this.nodeMap.get(nodeKey)!;
+		node.pos.y = node.layer * 150 + 100;
+
 		for (const connKey of this.graph.getConnectionsOf(nodeKey))
 		{
 
@@ -225,16 +244,8 @@ export class Network
 			for (const bTerm of this.graph.getConnectionsOf(aTerm))
 			{
 				const b = this.nodeMap.get(bTerm)!;
-				if (a.pos.x > b.pos.x) continue;
-				const distVec = Vector.sub(b.pos, a.pos);
-				const aEdge = Vector.add(
-					Vector.setMag(distVec, a.radius),
-					a.pos,
-				);
-				const bEdge = Vector.add(
-					Vector.setMag(distVec, -b.radius),
-					b.pos,
-				);
+				const aEdge = a.pos;
+				const bEdge = b.pos;
 				edgePath += `M${aEdge.x} ${aEdge.y} L${bEdge.x} ${bEdge.y}`;
 			}
 		}
