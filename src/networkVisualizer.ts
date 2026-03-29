@@ -8,13 +8,16 @@ interface NodeData
 {
 	key: string;
 	svg: SVGElement;
-	radius: number;
+	// radius: number;
+	width: number;
+	height: number;
 	pos: Vector;
 	vel: Vector;
 	acc: Vector;
 
 	// Layout
 	layer: number;
+	// order: number;
 }
 
 export class Network
@@ -28,12 +31,10 @@ export class Network
 
 	public constants = {
 		epsilon: 0.0001,
-		// idealNodeDist: 6,
-		idealNodeDist: 50,
-		springCoef: 0.3,
-		dampingCoef: 0.8,
+		gap: 100,
 	}
 
+	private revGraph = new Graph<string>();
 	private nodeMap = new Map<string, NodeData>();
 	private pos = Vector.zero();
 
@@ -82,7 +83,7 @@ export class Network
 				const svg = constructDiagram(term);
 				const width = +svg.getAttribute("width")!;
 				const height = +svg.getAttribute("height")!;
-				const radius = Math.hypot(width, height);
+				// const radius = Math.hypot(width, height);
 				const vel = Vector.zero();
 				const acc = Vector.zero();
 
@@ -100,48 +101,25 @@ export class Network
 
 				node = {
 					key: nodeKey,
-					radius, pos, vel, acc, svg,
+					// radius,
+					width,
+					height,
+					pos, vel, acc, svg,
 					layer: -1,
+					// order: -1,
 				};
 				this.nodeMap.set(nodeKey, node);
 				this.worldSVG.append(node.svg);
 			}
 		}
 
+		this.revGraph = this.graph.toReversedEdges();
+
 		// Layout
 		this.setLayers();
 		this.orderLayerNodes();
 		this.updateNode();
 		this.updateEdges();
-	}
-
-	public update(): void
-	{
-	}
-
-	private orderLayerNodes(): void
-	{
-		// Find layers
-		const layers: NodeData[][] = []
-		for (const node of this.nodeMap.values())
-		{
-			const l = node.layer;
-			if (!layers[l]) layers[l] = [node];
-			else layers[l].push(node);
-		}
-
-		// Center them
-		const offset = innerWidth / 2;
-		for (const layer of layers)
-		{
-			const layerLen = layer.length;
-			const layerWidth = layerLen * 200;
-			for (let i = 0; i < layerLen; i++)
-			{
-				const node = layer[i];
-				node.pos.x = i / layerLen * layerWidth - layerWidth / 2 + offset;
-			}
-		}
 	}
 
 	public moveBy(dp: Vector): void
@@ -198,7 +176,6 @@ export class Network
 
 		for (const connKey of this.graph.getConnectionsOf(nodeKey))
 		{
-
 			const conn = this.nodeMap.get(connKey)!;
 			if (conn.layer < node.layer + 1)
 			{
@@ -225,6 +202,131 @@ export class Network
 		}
 
 		throw new Error("Source node not found");
+	}
+
+	/**
+	 * Currently has no effect besides setting x coords
+	 */
+	private orderLayerNodes(): void
+	{
+		// Find layers
+		const layers: NodeData[][] = []
+		for (const node of this.nodeMap.values())
+		{
+			node.pos.x = -1;
+			const l = node.layer;
+			if (!layers[l]) layers[l] = [node];
+			else layers[l].push(node);
+		}
+
+		// TODO: implement clustering nodes according to parents/children influence
+		// // init root
+		// layers[0][0].pos.x = innerWidth / 2;
+
+		// // iterative passes
+		// for (let i = 0; i < 4; i++)
+		// {
+		// 	// top down
+		// 	for (let j = 1; j < layers.length; j++)
+		// 	{
+		// 		this.orderLayer(layers[j], this.revGraph);
+		// 	}
+
+		// 	// bottom up
+		// 	for (let j = layers.length - 2; j >= 0; j--)
+		// 	{
+		// 		this.orderLayer(layers[j], this.graph);
+		// 	}
+
+		// 	// console.log(layers.map((a, i) => `${i}: ${a[0].order}`));
+		// }
+
+
+		// Center them
+		const offset = innerWidth / 2;
+		for (const layer of layers)
+		{
+			const layerLen = layer.length;
+			const layerWidth = layerLen * 200;
+			for (let i = 0; i < layerLen; i++)
+			{
+				const node = layer[i];
+				node.pos.x = i / layerLen * layerWidth - layerWidth / 2 + offset;
+			}
+		}
+	}
+
+	private orderLayer(layer: NodeData[], incGraph: Graph<string>): void
+	{
+		// median ordering
+		for (const node of layer)
+		{
+			const incoming = incGraph.getConnectionsOf(node.key);
+			const incomingCnt = incoming.size;
+
+			if (!incomingCnt) node.pos.x = 0;
+			else
+			{
+				const incomingOrder = Array.from(incoming)
+					.map(k => this.nodeMap.get(k)!.pos.x)
+					.sort((a, b) => a - b);
+				const mean = incomingOrder
+					.reduce((acc, cur) => acc + cur / incomingCnt, 0);
+
+				node.pos.x = mean;
+
+				// const halfCnt = incomingCnt / 2;
+				// node.order = incomingOrder[Math.floor(halfCnt)];
+				// if (incomingCnt % 2 === 0)
+				// {
+				// 	node.order += incomingOrder[Math.ceil(halfCnt)];
+				// 	node.order /= 2;
+				// }
+			}
+		}
+
+		// push apart overlapping nodes
+		layer.sort((a, b) => a.pos.x - b.pos.x);
+
+		const run: NodeData[] = [];
+		for (let i = 0, iter = 1000; i < layer.length; i++, iter--)
+		{
+			if (iter < 0) throw new Error("could not layout");
+
+			const node = layer[i];
+			const front = layer[i + 1];
+			run.push(node);
+
+			if (!front || node.pos.x + node.width / 2 <= front.pos.x - front.width / 2)
+			{
+				if (run.length > 1)
+				{
+					let center = 0, runWidth = 0;
+					for (let j = 0; j < run.length; j++)
+					{
+						const node = run[j];
+						center += node.pos.x;
+						runWidth += node.width + this.constants.gap;
+						if (j === 0 || j === run.length - 1) runWidth -= node.width / 2;
+					}
+					center /= run.length;
+					runWidth -= this.constants.gap;
+
+					let x = center - runWidth / 2;
+					for (let j = 0; j < run.length; j++)
+					{
+						const node = run[j];
+						if (j) x += node.width / 2;
+						node.pos.x = x;
+						x += node.width / 2 + this.constants.gap;
+					}
+
+					i = 0;
+				}
+
+				run.length = 0;
+			}
+		}
 	}
 
 	private updateNode(): void

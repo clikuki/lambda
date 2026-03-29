@@ -54,4 +54,20 @@ export class Graph<T>
 		this.disconnect(a, b);
 		this.disconnect(b, a);
 	}
+
+	public toReversedEdges(): Graph<T>
+	{
+		const rev = new Graph<T>();
+
+		for (const [key, conns] of this.map)
+		{
+			for (const conn of conns)
+			{
+				rev.add(conn);
+				rev.connect(conn, key);
+			}
+		}
+
+		return rev;
+	}
 }

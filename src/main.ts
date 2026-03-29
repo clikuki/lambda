@@ -40,6 +40,7 @@ graph.add(stringifyLambda(terms[0]));
 // let tripped = false;
 function lambdaExpander(): boolean
 {
+	console.log("expand")
 	if (!terms.length) return false;
 
 	const newTerms: Term[] = [];
