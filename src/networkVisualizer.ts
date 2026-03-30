@@ -47,7 +47,6 @@ export class Network
 	};
 
 	constructor(
-		container: HTMLElement,
 		private graph: Graph<string>
 	)
 	{
@@ -63,11 +62,10 @@ export class Network
 			"stroke-linecap": "butt",
 		});
 		this.edgePathsSVG = createSVG("path", {
-			stroke: "#aaa",
+			stroke: "#767676",
 		});
 
 		this.worldSVG.append(this.edgePathsSVG);
-		container.append(this.worldSVG);
 
 		this.renewStateFromGraph();
 	}
@@ -247,11 +245,22 @@ export class Network
 		for (const layer of layers)
 		{
 			const layerLen = layer.length;
-			const layerWidth = layerLen * 200;
-			for (let i = 0; i < layerLen; i++)
+			let layerWidth = this.constants.gap * (layerLen - 1);
+			for (let j = 0; j < layerLen; j++)
 			{
-				const node = layer[i];
-				node.pos.x = i / layerLen * layerWidth - layerWidth / 2 + offset;
+				const node = layer[j];
+				layerWidth += node.width;
+				if (j === 0) layerWidth -= node.width / 2;
+				if (j === layerLen - 1) layerWidth -= node.width / 2;
+			}
+
+			let x = offset - layerWidth / 2;
+			for (let j = 0; j < layerLen; j++)
+			{
+				const node = layer[j];
+				if (j) x += node.width / 2;
+				node.pos.x = x;
+				x += node.width / 2 + this.constants.gap;
 			}
 		}
 	}

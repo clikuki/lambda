@@ -74,10 +74,8 @@ function lambdaExpander(): boolean
 // 		[a]: [...b]
 // 	}), {} as Record<string, string[]>))
 
-const network = new Network(
-	document.body,
-	graph,
-);
+const network = new Network(graph);
+document.body.prepend(network.worldSVG);
 
 const inputs = {
 	buttons: {
@@ -141,6 +139,12 @@ document.body.addEventListener("keyup", (e) =>
 	inputs.keys.set(e.key, false);
 })
 
+// PANEL INPUTS
+document.querySelector(".eval_all")?.addEventListener("click", () =>
+{
+	lambdaExpander();
+});
+
 try
 {
 	requestAnimationFrame(function loop()
@@ -175,14 +179,14 @@ try
 	throw error;
 }
 
-(function continualExpander()
-{
-	// lambdaExpander() && setTimeout(() => continualExpander(), 100);
-	setTimeout(() =>
-		// [...graph.getAllConnections()].length < 6 &&
-		lambdaExpander() && continualExpander(),
-		200);
-})()
+// (function continualExpander()
+// {
+// 	// lambdaExpander() && setTimeout(() => continualExpander(), 100);
+// 	setTimeout(() =>
+// 		// [...graph.getAllConnections()].length < 6 &&
+// 		lambdaExpander() && continualExpander(),
+// 		200);
+// })()
 
 // @ts-expect-error
 window.network = network;
