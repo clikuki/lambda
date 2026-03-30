@@ -1,5 +1,5 @@
 import { Graph } from "./graph.js";
-import { Network } from "./networkVisualizer.js";
+import { Network, NodeData } from "./networkVisualizer.js";
 import { Expr } from "./presetExpressions.js";
 import
 {
@@ -9,7 +9,17 @@ import
 	stringifyLambda,
 	Term
 } from "./lambda.js";
-import { Vector } from "./vector.js";
+
+/*
+# LEFT-SIDE REDUX OF `ADD 1 1`
+(@@@@ 3 1 (2 1 0)) (@@ 1 0) (@@ 1 0)
+(@@@ (@@ 1 0) 1 (2 1 0)) (@@ 1 0)
+(@@@ (@ 2 0) (2 1 0)) (@@ 1 0)
+(@@@ 1 (2 1 0)) (@@ 1 0)
+(@@ 1 ((@@ 1 0) 1 0))
+(@@ 1 ((@ 2 0) 0))
+(@@ 1 (1 0))
+*/
 
 const graph = new Graph<string>();
 const LE = new LambdaEval();
@@ -23,21 +33,12 @@ const seed = //
 // "(@0 0 0)(@0 0 0)";
 // "@@@@@1(2 4)@3(1 0)5";
 
-/*
-# LEFT-SIDE REDUX OF `ADD 1 1`
-(@@@@ 3 1 (2 1 0)) (@@ 1 0) (@@ 1 0)
-(@@@ (@@ 1 0) 1 (2 1 0)) (@@ 1 0)
-(@@@ (@ 2 0) (2 1 0)) (@@ 1 0)
-(@@@ 1 (2 1 0)) (@@ 1 0)
-(@@ 1 ((@@ 1 0) 1 0))
-(@@ 1 ((@ 2 0) 0))
-(@@ 1 (1 0))
-*/
-
 const terms = [parseLambda(seed)];
 graph.add(stringifyLambda(terms[0]));
 
-// let tripped = false;
+const network = new Network(graph);
+document.body.prepend(network.display.svg);
+
 function lambdaExpander(): boolean
 {
 	console.log("expand")
@@ -48,7 +49,6 @@ function lambdaExpander(): boolean
 	{
 		const aStr = stringifyLambda(term);
 		graph.add(aStr);
-		// console.log("From: ", aStr);
 
 		const reduxes = LE.findReductionPoints(term);
 		for (const redux of reduxes)
@@ -58,7 +58,6 @@ function lambdaExpander(): boolean
 			graph.add(bStr);
 			graph.connect(aStr, bStr);
 			newTerms.push(parseLambda(bStr));
-			// console.log("To: ", bStr);
 		}
 	}
 
@@ -68,128 +67,52 @@ function lambdaExpander(): boolean
 	return true;
 }
 
-// console.table([...graph.getAllConnections()]
-// 	.reduce((acc, [a, b]) => ({
-// 		...acc,
-// 		[a]: [...b]
-// 	}), {} as Record<string, string[]>))
-
-const network = new Network(graph);
-document.body.prepend(network.worldSVG);
-
-const inputs = {
-	buttons: {
-		mid: 4,
-	},
-
-	keys: new Map<string, boolean>(),
-
-	pos: Vector.zero(),
-	prevPos: Vector.zero(),
-	pressed: 0,
-
-	pxZoomScale: 0.001,
-	lineZoomScale: 0.2,
-	keyZoomScale: 0.1,
-	keyMoveScale: 30,
-
-	isDown(btn: number): boolean
+function findOverlappedNode(x: number, y: number): NodeData | null
+{
+	for (const [, node] of network.nodeMap)
 	{
-		return (this.pressed & btn) !== 0;
+		const hw = node.width / 2;
+		const hh = node.height / 2;
+		if (x < node.pos.x - hw) continue;
+		if (x > node.pos.x + hw) continue;
+		if (y < node.pos.y - hh) continue;
+		if (y > node.pos.y + hh) continue;
+		return node;
 	}
+
+	return null;
 }
-network.worldSVG.addEventListener("mousedown", (e) => { inputs.pressed = e.buttons; });
-network.worldSVG.addEventListener("mouseup", (e) => { inputs.pressed = e.buttons; });
-network.worldSVG.addEventListener("mousemove", (e) =>
-{
-	const pos = network.worldSVG.getBoundingClientRect();
-	inputs.prevPos = inputs.pos;
-	inputs.pos = Vector.sub(new Vector(e.x, e.y), pos);
 
-	if (inputs.isDown(inputs.buttons.mid))
+network.display.svg.addEventListener("mousedown", (e) =>
+{
+	const { scale, pos } = network.display;
+	const x = e.x * scale + pos.x;
+	const y = e.y * scale + pos.y;
+	const node = findOverlappedNode(x, y);
+	if (node)
 	{
-		const dp = Vector.sub(inputs.pos, inputs.prevPos);
-		network.moveBy(dp);
+		console.log(node);
 	}
 });
-network.worldSVG.addEventListener("wheel", (e) =>
-{
-	let ds;
-	switch (e.deltaMode)
-	{
-		case 0x00:
-			ds = e.deltaY * inputs.pxZoomScale;
-			break;
-		case 0x01:
-		case 0x02:
-		default:
-			ds = Math.sign(e.deltaY) * inputs.lineZoomScale;
-			break;
-	}
 
-	network.scaleBy(ds, inputs.pos);
-})
+// PANEL
+document.querySelector(".eval_all")!.addEventListener("click", lambdaExpander);
 
-document.body.addEventListener("keydown", (e) =>
-{
-	inputs.keys.set(e.key, true);
-})
-document.body.addEventListener("keyup", (e) =>
-{
-	inputs.keys.set(e.key, false);
-})
+// const displayContainer = document.querySelector(".display") as HTMLDivElement;
 
-// PANEL INPUTS
-document.querySelector(".eval_all")?.addEventListener("click", () =>
-{
-	lambdaExpander();
-});
 
+// LOOP
 try
 {
 	requestAnimationFrame(function loop()
 	{
+		network.display.listenToKeys();
 		requestAnimationFrame(loop);
-
-		// Handle keyboard controls
-		const moveUp = inputs.keys.get("w") ?? false;
-		const moveDown = inputs.keys.get("s") ?? false;
-		const moveLeft = inputs.keys.get("a") ?? false;
-		const moveRight = inputs.keys.get("d") ?? false;
-		if (moveUp || moveDown || moveLeft || moveRight)
-		{
-			network.moveBy(Vector.mult({
-				x: (+moveLeft + -moveRight),
-				y: (+moveUp + -moveDown),
-			}, inputs.keyMoveScale));
-		}
-
-		const scaleDown = inputs.keys.get("-") ?? inputs.keys.get("_") ?? false;
-		const scaleUp = inputs.keys.get("=") ?? inputs.keys.get("+") ?? false;
-		if (scaleDown || scaleUp)
-		{
-			network.scaleBy((+scaleDown + -scaleUp) * inputs.keyZoomScale, {
-				x: innerWidth / 2,
-				y: innerHeight / 2,
-			});
-		}
 	})
 } catch (error)
 {
 	throw error;
 }
 
-// (function continualExpander()
-// {
-// 	// lambdaExpander() && setTimeout(() => continualExpander(), 100);
-// 	setTimeout(() =>
-// 		// [...graph.getAllConnections()].length < 6 &&
-// 		lambdaExpander() && continualExpander(),
-// 		200);
-// })()
-
 // @ts-expect-error
 window.network = network;
-
-// @ts-expect-error
-window.expand = lambdaExpander;

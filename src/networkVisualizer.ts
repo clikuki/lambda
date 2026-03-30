@@ -1,33 +1,26 @@
+import { Display } from "./display.js";
 import { Graph } from "./graph.js";
 import { parseLambda } from "./lambda.js";
 import { constructDiagram } from "./tromp.js";
 import { createSVG, pointOnRect } from "./utils.js";
 import { Vector } from "./vector.js";
 
-interface NodeData
+export interface NodeData
 {
 	key: string;
 	svg: SVGElement;
-	// radius: number;
 	width: number;
 	height: number;
 	pos: Vector;
 	vel: Vector;
 	acc: Vector;
-
-	// Layout
 	layer: number;
-	// order: number;
 }
 
 export class Network
 {
-	public worldSVG: SVGElement;
+	public display = new Display();
 	public edgePathsSVG: SVGElement;
-
-	public scale = 1;
-	public fullView: Vector;
-	public view: Vector;
 
 	public constants = {
 		epsilon: 0.0001,
@@ -35,38 +28,17 @@ export class Network
 		edgePad: 20,
 	}
 
-	private revGraph = new Graph<string>();
-	private nodeMap = new Map<string, NodeData>();
-	private pos = Vector.zero();
-
-	private style = {
-		linewidth: 2,
-		paramLineGap: 6,
-		applicationRowGap: 10,
-		applicationColGap: 10,
-		pad: 2,
-	};
+	public nodeMap = new Map<string, NodeData>();
 
 	constructor(
 		private graph: Graph<string>
 	)
 	{
-		this.fullView = new Vector(innerWidth, innerHeight);
-		this.view = Vector.div(this.fullView, this.scale);
-
-		this.worldSVG = createSVG("svg", {
-			width: innerWidth,
-			height: innerHeight,
-			viewBox: `${this.pos.x} ${this.pos.y} ${this.view.x} ${this.view.y}`,
-			stroke: "black",
-			"stroke-width": this.style.linewidth,
-			"stroke-linecap": "butt",
-		});
 		this.edgePathsSVG = createSVG("path", {
 			stroke: "#767676",
 		});
 
-		this.worldSVG.append(this.edgePathsSVG);
+		this.display.svg.append(this.edgePathsSVG);
 
 		this.renewStateFromGraph();
 	}
@@ -79,78 +51,31 @@ export class Network
 			if (!node)
 			{
 				const term = parseLambda(nodeKey);
-				const svg = constructDiagram(term);
-				const width = +svg.getAttribute("width")!;
-				const height = +svg.getAttribute("height")!;
-				// const radius = Math.hypot(width, height);
-				const vel = Vector.zero();
-				const acc = Vector.zero();
-
-				// Place node close to its adjacents
-				// Randomness required to avoid axis explosion
-				const offset = Vector.from(
-					// Bias expansions downwards
-					Math.random() * Math.PI / 4 + Math.PI * 3 / 8,
-					100
-				);
-
-				// const offset = new Vector(Math.random(), 50);
-				let pos = new Vector(innerWidth / 2, innerHeight / 2);
-				pos = Vector.add(pos, offset);
-
 				node = {
 					key: nodeKey,
-					// radius,
-					width,
-					height,
-					pos, vel, acc, svg,
+					svg: constructDiagram(term),
+					width: -1,
+					height: -1,
+					vel: Vector.zero(),
+					acc: Vector.zero(),
+					pos: new Vector(0, 0),
 					layer: -1,
-					// order: -1,
 				};
+
+				node.svg.setAttribute("key", nodeKey);
+				node.width = +node.svg.getAttribute("width")!
+				node.height = +node.svg.getAttribute("height")!
+
 				this.nodeMap.set(nodeKey, node);
-				this.worldSVG.append(node.svg);
+				this.display.addElement(node.svg);
 			}
 		}
-
-		this.revGraph = this.graph.toReversedEdges();
 
 		// Layout
 		this.setLayers();
 		this.orderLayerNodes();
 		this.updateNode();
 		this.updateEdges();
-	}
-
-	public moveBy(dp: Vector): void
-	{
-		this.pos = Vector.sub(this.pos, Vector.mult(dp, this.scale));
-		this.worldSVG.setAttribute(
-			"viewBox",
-			`${this.pos.x} ${this.pos.y} ${this.view.x} ${this.view.y}`,
-		);
-	}
-
-	public scaleBy(ds: number, center: Vector): void
-	{
-		this.scale = Math.max(0.1, this.scale + ds);
-
-		const oldView = this.view;
-		this.view = Vector.mult(this.fullView, this.scale);
-
-		const proportion = Vector.sub(this.fullView, center);
-		proportion.x /= this.fullView.x;
-		proportion.y /= this.fullView.y;
-
-		const offset = Vector.sub(this.view, oldView);
-		offset.x *= 1 - proportion.x;
-		offset.y *= 1 - proportion.y;
-
-		this.pos = Vector.sub(this.pos, offset);
-
-		this.worldSVG.setAttribute(
-			"viewBox",
-			`${this.pos.x} ${this.pos.y} ${this.view.x} ${this.view.y}`,
-		);
 	}
 
 	private setLayers(): void
