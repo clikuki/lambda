@@ -1,7 +1,7 @@
 import { Graph } from "./graph.js";
 import { parseLambda } from "./lambda.js";
 import { constructDiagram } from "./tromp.js";
-import { createSVG } from "./utils.js";
+import { createSVG, pointOnRect } from "./utils.js";
 import { Vector } from "./vector.js";
 
 interface NodeData
@@ -31,7 +31,8 @@ export class Network
 
 	public constants = {
 		epsilon: 0.0001,
-		gap: 100,
+		gap: 200,
+		edgePad: 20,
 	}
 
 	private revGraph = new Graph<string>();
@@ -241,7 +242,7 @@ export class Network
 
 
 		// Center them
-		const offset = innerWidth / 2;
+		const offset = innerWidth / 4; // hardcode for now
 		for (const layer of layers)
 		{
 			const layerLen = layer.length;
@@ -355,8 +356,20 @@ export class Network
 			for (const bTerm of this.graph.getConnectionsOf(aTerm))
 			{
 				const b = this.nodeMap.get(bTerm)!;
-				const aEdge = a.pos;
-				const bEdge = b.pos;
+				const aEdge = pointOnRect(
+					b.pos.x, b.pos.y,
+					a.pos.x - a.width * 0.5 - this.constants.edgePad,
+					a.pos.y - a.height * 0.5 - this.constants.edgePad,
+					a.pos.x + a.width * 0.5 + this.constants.edgePad,
+					a.pos.y + a.height * 0.5 + this.constants.edgePad,
+				);
+				const bEdge = pointOnRect(
+					a.pos.x, a.pos.y,
+					b.pos.x - b.width * 0.5 - this.constants.edgePad,
+					b.pos.y - b.height * 0.5 - this.constants.edgePad,
+					b.pos.x + b.width * 0.5 + this.constants.edgePad,
+					b.pos.y + b.height * 0.5 + this.constants.edgePad,
+				);
 				edgePath += `M${aEdge.x} ${aEdge.y} L${bEdge.x} ${bEdge.y}`;
 			}
 		}
