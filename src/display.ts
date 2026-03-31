@@ -11,7 +11,7 @@ const enum Scales
 	keyMove = 30,
 }
 
-const registeredDisplays: Display[] = [];
+let focusedDisplay: Display | null = null;
 export class Display
 {
 	public svg: SVGElement;
@@ -31,8 +31,6 @@ export class Display
 
 	constructor(container: HTMLElement, public isCentered: boolean)
 	{
-		registeredDisplays.push(this);
-
 		const containerBox = container.getBoundingClientRect();
 		this.fullView = new Vector(containerBox.width, containerBox.height);
 		this.view = Vector.div(this.fullView, this.scale);
@@ -49,6 +47,11 @@ export class Display
 		});
 
 		// Event listeners
+		this.svg.addEventListener("click", () =>
+		{
+			focusedDisplay = this;
+		})
+
 		this.svg.addEventListener("mousemove", () =>
 		{
 			if (!isMouseDown(4)) return;
@@ -159,4 +162,9 @@ export class Display
 		proportion.y /= this.fullView.y;
 		return proportion;
 	}
+}
+
+export function updateDisplaysWithKeyboard(): void
+{
+	focusedDisplay?.listenToKeys();
 }

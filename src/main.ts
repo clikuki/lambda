@@ -11,6 +11,7 @@ import
 	Term
 } from "./lambda.js";
 import { Transition } from "./transitionVisualizer.js";
+import { updateDisplaysWithKeyboard } from "./display.js";
 
 /*
 # LEFT-SIDE REDUX OF `ADD 1 1`
@@ -112,8 +113,7 @@ try
 {
 	requestAnimationFrame(function loop()
 	{
-		network.display.listenToKeys();
-		transition.display.listenToKeys();
+		updateDisplaysWithKeyboard();
 		requestAnimationFrame(loop);
 	})
 } catch (error)
