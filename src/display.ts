@@ -29,17 +29,20 @@ export class Display
 		pad: 2,
 	};
 
-	constructor()
+	constructor(container: HTMLElement, public isCentered: boolean)
 	{
 		registeredDisplays.push(this);
 
-		this.fullView = new Vector(innerWidth, innerHeight);
+		const containerBox = container.getBoundingClientRect();
+		this.fullView = new Vector(containerBox.width, containerBox.height);
 		this.view = Vector.div(this.fullView, this.scale);
 
+		const viewPosX = this.pos.x - (isCentered ? this.fullView.x / 2 : 0);
+		const viewPosY = this.pos.y - (isCentered ? this.fullView.y / 2 : 0);
 		this.svg = createSVG("svg", {
-			width: innerWidth,
-			height: innerHeight,
-			viewBox: `${this.pos.x} ${this.pos.y} ${this.view.x} ${this.view.y}`,
+			width: this.fullView.x,
+			height: this.fullView.y,
+			viewBox: `${viewPosX} ${viewPosY} ${this.view.x} ${this.view.y}`,
 			stroke: "black",
 			"stroke-width": this.style.linewidth,
 			"stroke-linecap": "butt",
@@ -67,8 +70,13 @@ export class Display
 					break;
 			}
 
-			this.scaleBy(scrollAmount, getMousePosition());
+			this.scaleBy(
+				scrollAmount,
+				getMousePosition(),
+			);
 		})
+
+		container.prepend(this.svg);
 	}
 
 	public listenToKeys(): void
@@ -89,10 +97,10 @@ export class Display
 		const scaleUp = isKeyDown("=") || isKeyDown("+");
 		if (scaleDown || scaleUp)
 		{
-			this.scaleBy((+scaleDown + -scaleUp) * Scales.keyMove, {
-				x: innerWidth / 2,
-				y: innerHeight / 2,
-			});
+			this.scaleBy(
+				(+scaleDown + -scaleUp) * Scales.keyZoom,
+				{ x: 0.5, y: 0.5 }, true
+			);
 		}
 	}
 
@@ -104,22 +112,23 @@ export class Display
 	public moveBy(dp: Vector): void
 	{
 		this.pos = Vector.sub(this.pos, Vector.mult(dp, this.scale));
+
+		const viewPosX = this.pos.x - (this.isCentered ? this.fullView.x / 2 : 0);
+		const viewPosY = this.pos.y - (this.isCentered ? this.fullView.y / 2 : 0);
 		this.svg.setAttribute(
 			"viewBox",
-			`${this.pos.x} ${this.pos.y} ${this.view.x} ${this.view.y}`,
+			`${viewPosX} ${viewPosY} ${this.view.x} ${this.view.y}`,
 		);
 	}
 
-	public scaleBy(ds: number, center: Vector): void
+	public scaleBy(ds: number, center: Vector, isProportion = false): void
 	{
+		let proportion = isProportion ? center : this.getWorldProportionOfPoint(center);
+
 		this.scale = Math.max(0.1, this.scale + ds);
 
 		const oldView = this.view;
 		this.view = Vector.mult(this.fullView, this.scale);
-
-		const proportion = Vector.sub(this.fullView, center);
-		proportion.x /= this.fullView.x;
-		proportion.y /= this.fullView.y;
 
 		const offset = Vector.sub(this.view, oldView);
 		offset.x *= 1 - proportion.x;
@@ -127,9 +136,27 @@ export class Display
 
 		this.pos = Vector.sub(this.pos, offset);
 
+		const viewPosX = this.pos.x - (this.isCentered ? this.fullView.x / 2 : 0);
+		const viewPosY = this.pos.y - (this.isCentered ? this.fullView.y / 2 : 0);
 		this.svg.setAttribute(
 			"viewBox",
-			`${this.pos.x} ${this.pos.y} ${this.view.x} ${this.view.y}`,
+			`${viewPosX} ${viewPosY} ${this.view.x} ${this.view.y}`,
 		);
+	}
+
+	private getWorldProportionOfPoint(point: Vector): Vector
+	{
+		const svgBox = this.svg.getBoundingClientRect();
+		const center = Vector.sub(point, svgBox);
+
+		if (this.isCentered)
+		{
+			console.log(center.x, center.y);
+		}
+
+		const proportion = Vector.sub(this.fullView, center);
+		proportion.x /= this.fullView.x;
+		proportion.y /= this.fullView.y;
+		return proportion;
 	}
 }

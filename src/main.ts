@@ -4,11 +4,13 @@ import { Expr } from "./presetExpressions.js";
 import
 {
 	code,
-	LambdaEval,
+	findReductionPoints,
 	parseLambda,
+	performReduction,
 	stringifyLambda,
 	Term
 } from "./lambda.js";
+import { Transition } from "./transitionVisualizer.js";
 
 /*
 # LEFT-SIDE REDUX OF `ADD 1 1`
@@ -22,7 +24,6 @@ import
 */
 
 const graph = new Graph<string>();
-const LE = new LambdaEval();
 const seed = //
 	// code`${Expr.ADD}${Expr.numeral(1)}${Expr.numeral(1)}`;
 	// code`${Expr.EXP}${Expr.numeral(2)}${Expr.numeral(2)}`;
@@ -36,8 +37,15 @@ const seed = //
 const terms = [parseLambda(seed)];
 graph.add(stringifyLambda(terms[0]));
 
-const network = new Network(graph);
+const network = new Network(document.body, graph);
 document.body.prepend(network.display.svg);
+
+const displayContainer = document.querySelector(".display") as HTMLDivElement;
+const transition = new Transition(displayContainer);
+transition.use(seed);
+displayContainer.append(transition.display.svg);
+
+// const reductionIndex
 
 function lambdaExpander(): boolean
 {
@@ -50,10 +58,10 @@ function lambdaExpander(): boolean
 		const aStr = stringifyLambda(term);
 		graph.add(aStr);
 
-		const reduxes = LE.findReductionPoints(term);
+		const reduxes = findReductionPoints(term);
 		for (const redux of reduxes)
 		{
-			const reduxed = LE.performReduction(term, redux);
+			const [reduxed] = performReduction(term, redux);
 			const bStr = stringifyLambda(reduxed);
 			graph.add(bStr);
 			graph.connect(aStr, bStr);
@@ -98,8 +106,6 @@ network.display.svg.addEventListener("mousedown", (e) =>
 // PANEL
 document.querySelector(".eval_all")!.addEventListener("click", lambdaExpander);
 
-// const displayContainer = document.querySelector(".display") as HTMLDivElement;
-
 
 // LOOP
 try
@@ -107,6 +113,7 @@ try
 	requestAnimationFrame(function loop()
 	{
 		network.display.listenToKeys();
+		transition.display.listenToKeys();
 		requestAnimationFrame(loop);
 	})
 } catch (error)

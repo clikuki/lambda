@@ -12,14 +12,12 @@ export interface NodeData
 	width: number;
 	height: number;
 	pos: Vector;
-	vel: Vector;
-	acc: Vector;
 	layer: number;
 }
 
 export class Network
 {
-	public display = new Display();
+	public display: Display;
 	public edgePathsSVG: SVGElement;
 
 	public constants = {
@@ -31,9 +29,12 @@ export class Network
 	public nodeMap = new Map<string, NodeData>();
 
 	constructor(
+		container: HTMLElement,
 		private graph: Graph<string>
 	)
 	{
+		this.display = new Display(container, false);
+
 		this.edgePathsSVG = createSVG("path", {
 			stroke: "#767676",
 		});
@@ -56,8 +57,6 @@ export class Network
 					svg: constructDiagram(term),
 					width: -1,
 					height: -1,
-					vel: Vector.zero(),
-					acc: Vector.zero(),
 					pos: new Vector(0, 0),
 					layer: -1,
 				};

@@ -31,98 +31,112 @@ export interface Replacer
 
 export const FUNC_CHAR = "@";
 
-export class LambdaEval
+export function findReductionPoints(
+	term: Term,
+	reduxPts: Application[] = [],
+): Application[]
 {
-	public findReductionPoints(
-		term: Term,
-		reduxPts: Application[] = [],
-	): Application[]
+	switch (term.type)
 	{
-		switch (term.type)
-		{
-			case "VARIABLE":
-				break;
+		case "VARIABLE":
+			break;
 
-			case "APPLICATION":
-				if (term.left.type === "ABSTRACTION")
-				{
-					reduxPts.push(term);
-				}
-				this.findReductionPoints(term.left, reduxPts);
-				this.findReductionPoints(term.right, reduxPts);
-				break;
+		case "APPLICATION":
+			if (term.left.type === "ABSTRACTION")
+			{
+				reduxPts.push(term);
+			}
+			findReductionPoints(term.left, reduxPts);
+			findReductionPoints(term.right, reduxPts);
+			break;
 
-			case "ABSTRACTION":
-				this.findReductionPoints(term.body, reduxPts);
-				break;
-		}
-
-		return reduxPts;
+		case "ABSTRACTION":
+			findReductionPoints(term.body, reduxPts);
+			break;
 	}
 
-	public performReduction(root: Term, reduxPt: Application): Term
-	{
-		return this.cloner(root, reduxPt);
-	}
+	return reduxPts;
+}
 
-	private cloner(
-		term: Term,
-		reduxPt: Application | null = null,
-		sub: [ID, Term] | null = null,
-		mapping = new Map<ID, ID>(),
-		IDGen = getID(),
-	): Term
+export function performReduction(root: Term, reduxPt: Application): [Term, Replacer]
+{
+	const replacer: Replacer = { at: [] };
+	return [
+		cloner(
+			root, reduxPt, null, undefined, undefined, replacer
+		),
+		replacer
+	];
+}
+
+function cloner(
+	term: Term,
+	reduxPt: Application | null = null,
+	sub: [ID, Term] | null = null,
+	mapping = new Map<ID, ID>(),
+	IDGen = getID(),
+	replacer?: Replacer
+): Term
+{
+	if (term === reduxPt)
 	{
-		if (term === reduxPt)
+		const { left, right } = reduxPt;
+		if (left.type !== "ABSTRACTION") throw new Error(
+			"Left side of application must be an abstraction"
+		);
+
+		if (replacer)
 		{
-			const { left, right } = reduxPt;
-			if (left.type !== "ABSTRACTION") throw new Error(
-				"Left side of application must be an abstraction"
-			);
-
-			return this.cloner(
-				left.body, null, [left.param, right], mapping, IDGen
-			);
+			replacer.by = right;
 		}
 
-		if (term.type === "VARIABLE")
+		return cloner(
+			left.body, null, [left.param, right], mapping, IDGen
+		);
+	}
+
+	if (term.type === "VARIABLE")
+	{
+		if (sub && term.id === sub[0])
 		{
-			if (sub && term.id === sub[0]) return this.cloner(
+			const copy = cloner(
 				sub[1], null, null, mapping, IDGen
 			);
-
-			let newID = mapping.get(term.id);
-			if (!newID) mapping.set(term.id, newID = IDGen());
-
-			return {
-				type: "VARIABLE",
-				id: newID,
-				oldID: term.id,
-			};
+			if (replacer) replacer.at.push(copy);
+			return copy;
 		}
-		else if (term.type === "APPLICATION")
-		{
-			return {
-				type: "APPLICATION",
-				id: IDGen(),
-				oldID: term.id,
-				left: this.cloner(term.left, reduxPt, sub, mapping, IDGen),
-				right: this.cloner(term.right, reduxPt, sub, mapping, IDGen),
-			};
-		}
-		else
-		{
-			let newParam = mapping.get(term.param);
-			if (!newParam) mapping.set(term.param, newParam = IDGen());
 
-			return {
-				type: "ABSTRACTION",
-				id: IDGen(),
-				oldID: term.id,
-				param: newParam,
-				body: this.cloner(term.body, reduxPt, sub, mapping, IDGen),
-			};
-		}
+		let newID = mapping.get(term.id);
+		if (!newID) mapping.set(term.id, newID = IDGen());
+
+		return {
+			type: "VARIABLE",
+			id: newID,
+			oldID: term.id,
+		};
+	}
+	else if (term.type === "APPLICATION")
+	{
+		return {
+			type: "APPLICATION",
+			id: IDGen(),
+			oldID: term.id,
+			left: cloner(term.left, reduxPt, sub, mapping, IDGen),
+			right: cloner(term.right, reduxPt, sub, mapping, IDGen),
+		};
+	}
+	else
+	{
+		let newParam = mapping.get(term.param);
+		if (!newParam) mapping.set(term.param, newParam = IDGen());
+
+		return {
+			type: "ABSTRACTION",
+			id: IDGen(),
+			oldID: term.id,
+			param: newParam,
+			body: cloner(term.body, reduxPt, sub, mapping, IDGen),
+		};
 	}
 }
 
