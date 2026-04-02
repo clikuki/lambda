@@ -1,4 +1,4 @@
-import { Replacer, type Term } from "./lambda.js";
+import { type Term } from "./lambda.js";
 import { createSVG, ID, setAttributes } from "./utils.js";
 
 const startTime = Date.now();
@@ -244,50 +244,50 @@ function computeWidths(t: DiagramTerm, x = 0)
 	}
 }
 
-interface Extrema
-{
-	sx: number;
-	sy: number;
-	lx: number;
-	ly: number;
-}
-function findExtremas(
-	t: DiagramTerm,
-	ext: Extrema = {
-		sx: Infinity,
-		sy: Infinity,
-		lx: -Infinity,
-		ly: -Infinity,
-	}
-)
-{
-	switch (t.type)
-	{
-		case "ABSTRACTION":
-			ext.sx = Math.min(ext.sx, t.x1!, t.x2!);
-			ext.lx = Math.max(ext.lx, t.x1!, t.x2!);
-			ext.sy = Math.min(ext.sy, t.y1!, t.y2!);
-			ext.ly = Math.max(ext.ly, t.y1!, t.y2!);
-			findExtremas(t.body);
-			break;
-		case "APPLICATION":
-			ext.sx = Math.min(ext.sx, t.x1!, t.x2!);
-			ext.lx = Math.max(ext.lx, t.x1!, t.x2!);
-			ext.sy = Math.min(ext.sy, t.y!);
-			ext.ly = Math.max(ext.ly, t.y!);
-			findExtremas(t.left);
-			findExtremas(t.right);
-			break;
-		case "VARIABLE":
-			ext.sx = Math.min(ext.sx, t.x!);
-			ext.lx = Math.max(ext.lx, t.x!);
-			ext.sy = Math.min(ext.sy, t.y1!, t.y2!);
-			ext.ly = Math.max(ext.ly, t.y1!, t.y2!);
-			break;
-	}
+// interface Extrema
+// {
+// 	sx: number;
+// 	sy: number;
+// 	lx: number;
+// 	ly: number;
+// }
+// function findExtremas(
+// 	t: DiagramTerm,
+// 	ext: Extrema = {
+// 		sx: Infinity,
+// 		sy: Infinity,
+// 		lx: -Infinity,
+// 		ly: -Infinity,
+// 	}
+// )
+// {
+// 	switch (t.type)
+// 	{
+// 		case "ABSTRACTION":
+// 			ext.sx = Math.min(ext.sx, t.x1!, t.x2!);
+// 			ext.lx = Math.max(ext.lx, t.x1!, t.x2!);
+// 			ext.sy = Math.min(ext.sy, t.y1!, t.y2!);
+// 			ext.ly = Math.max(ext.ly, t.y1!, t.y2!);
+// 			findExtremas(t.body);
+// 			break;
+// 		case "APPLICATION":
+// 			ext.sx = Math.min(ext.sx, t.x1!, t.x2!);
+// 			ext.lx = Math.max(ext.lx, t.x1!, t.x2!);
+// 			ext.sy = Math.min(ext.sy, t.y!);
+// 			ext.ly = Math.max(ext.ly, t.y!);
+// 			findExtremas(t.left);
+// 			findExtremas(t.right);
+// 			break;
+// 		case "VARIABLE":
+// 			ext.sx = Math.min(ext.sx, t.x!);
+// 			ext.lx = Math.max(ext.lx, t.x!);
+// 			ext.sy = Math.min(ext.sy, t.y1!, t.y2!);
+// 			ext.ly = Math.max(ext.ly, t.y1!, t.y2!);
+// 			break;
+// 	}
 
-	return ext;
-}
+// 	return ext;
+// }
 
 function getTreeSize(tree: DiagramTerm): [number, number]
 {
@@ -328,8 +328,6 @@ function matchNodes(
 	main: Term,
 	sides: Term[],
 	matches: [Term, Term[]][],
-	b: SVGElement,
-	a: SVGElement
 )
 {
 	matches.push([main, sides]);
@@ -344,8 +342,6 @@ function matchNodes(
 					return s.body;
 				}),
 				matches,
-				b,
-				a
 			);
 			break;
 		case "APPLICATION":
@@ -359,8 +355,6 @@ function matchNodes(
 						return s[branch];
 					}),
 					matches,
-					b,
-					a
 				);
 			}
 	}
@@ -373,6 +367,7 @@ function animateAttributes(
 	attributes: string[]
 )
 {
+	console.log(mainEl, sideEls);
 	const oldAttr = new Map(
 		attributes.map((attr) => [attr, mainEl.getAttribute(attr)!])
 	);
@@ -394,7 +389,7 @@ function animateAttributes(
 			const animate = createSVG("animate", {
 				attributeName: attr,
 				to: newValue,
-				dur: ".3s",
+				dur: ".5s",
 				begin,
 				fill: "freeze",
 			});
@@ -486,14 +481,13 @@ function buildPath(tree: DiagramTerm): SVGElement
 export function transitionSVG(
 	before: SVGElement,
 	after: SVGElement,
-	replaced: Replacer
 ): void
 {
 	const mutations: (() => void)[] = [];
 	const children = Array.from(before.children) as SVGElement[];
 
 	const changes: [Term, Term[]][] = [];
-	matchNodes(replaced.by!, replaced.at, changes, before, after);
+	// matchNodes(replacer.by!, replacer.at, changes);
 
 	// Update container size
 	animateAttributes(
@@ -509,6 +503,8 @@ export function transitionSVG(
 		const mainEl = before.querySelector<SVGElement>(
 			`[lambda-id="${main.id.str}"]`
 		)!;
+		console.log(main.id.str, mainEl)
+
 		try
 		{
 			if (sides.length > 0)
@@ -525,8 +521,10 @@ export function transitionSVG(
 			} else
 			{
 				// Argument not present after reducing, ex. (@x.a)b -> a
+				console.log("Not present: add", main.id.str);
 				mutations.push(() =>
 				{
+					console.log("Not present: delete", main.id.str);
 					mainEl.setAttribute("stroke", "transparent");
 					mainEl.addEventListener("transitionend", () => mainEl.remove());
 				});
@@ -549,8 +547,10 @@ export function transitionSVG(
 		}
 		else if (!changes.find(([a]) => a.id.str === id))
 		{
+			console.log("Has not matched: add", id);
 			mutations.push(() =>
 			{
+				console.log("Has not matched: delete", id);
 				child.setAttribute("stroke", "transparent");
 				child.addEventListener("transitionend", () => child.remove());
 			});

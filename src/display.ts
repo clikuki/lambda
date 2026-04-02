@@ -21,6 +21,8 @@ export class Display
 	public fullView: Vector;
 	public view: Vector;
 
+	public onClick?: (e: PointerEvent) => void;
+
 	private style = {
 		linewidth: 2,
 		paramLineGap: 6,
@@ -47,14 +49,16 @@ export class Display
 		});
 
 		// Event listeners
-		this.svg.addEventListener("click", () =>
+		this.svg.addEventListener("click", (e) =>
 		{
 			focusedDisplay = this;
+			this.onClick?.(e);
 		})
 
 		this.svg.addEventListener("mousemove", () =>
 		{
 			if (!isMouseDown(4)) return;
+			focusedDisplay = this;
 			this.moveBy(getMouseMovement());
 		});
 
@@ -73,6 +77,7 @@ export class Display
 					break;
 			}
 
+			focusedDisplay = this;
 			this.scaleBy(
 				scrollAmount,
 				getMousePosition(),
@@ -110,6 +115,11 @@ export class Display
 	public addElement(elem: SVGElement): void
 	{
 		this.svg.append(elem);
+	}
+
+	public replaceElements(...elems: SVGElement[]): void
+	{
+		this.svg.replaceChildren(...elems);
 	}
 
 	public moveBy(dp: Vector): void
@@ -151,12 +161,6 @@ export class Display
 	{
 		const svgBox = this.svg.getBoundingClientRect();
 		const center = Vector.sub(point, svgBox);
-
-		if (this.isCentered)
-		{
-			console.log(center.x, center.y);
-		}
-
 		const proportion = Vector.sub(this.fullView, center);
 		proportion.x /= this.fullView.x;
 		proportion.y /= this.fullView.y;

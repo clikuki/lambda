@@ -4,7 +4,6 @@ interface LambdaNode
 {
 	type: string;
 	id: ID;
-	oldID?: ID;
 }
 export interface Abstraction extends LambdaNode
 {
@@ -23,11 +22,6 @@ export interface Variable extends LambdaNode
 	type: "VARIABLE";
 }
 export type Term = Application | Abstraction | Variable;
-export interface Replacer
-{
-	by?: Term;
-	at: Term[];
-}
 
 export const FUNC_CHAR = "@";
 
@@ -58,15 +52,9 @@ export function findReductionPoints(
 	return reduxPts;
 }
 
-export function performReduction(root: Term, reduxPt: Application): [Term, Replacer]
+export function performReduction(root: Term, reduxPt: Application): Term
 {
-	const replacer: Replacer = { at: [] };
-	return [
-		cloner(
-			root, reduxPt, null, undefined, undefined, replacer
-		),
-		replacer
-	];
+	return cloner(root, reduxPt, null, undefined, undefined);
 }
 
 function cloner(
@@ -75,7 +63,6 @@ function cloner(
 	sub: [ID, Term] | null = null,
 	mapping = new Map<ID, ID>(),
 	IDGen = getID(),
-	replacer?: Replacer
 ): Term
 {
 	if (term === reduxPt)
@@ -85,11 +72,6 @@ function cloner(
 			"Left side of application must be an abstraction"
 		);
 
-		if (replacer)
-		{
-			replacer.by = right;
-		}
-
 		return cloner(
 			left.body, null, [left.param, right], mapping, IDGen
 		);
@@ -97,14 +79,9 @@ function cloner(
 
 	if (term.type === "VARIABLE")
 	{
-		if (sub && term.id === sub[0])
-		{
-			const copy = cloner(
-				sub[1], null, null, mapping, IDGen
-			);
-			if (replacer) replacer.at.push(copy);
-			return copy;
-		}
+		if (sub && term.id === sub[0]) return cloner(
+			sub[1], null, null, mapping, IDGen
+		);
 
 		let newID = mapping.get(term.id);
 		if (!newID) mapping.set(term.id, newID = IDGen());
@@ -112,7 +89,6 @@ function cloner(
 		return {
 			type: "VARIABLE",
 			id: newID,
-			oldID: term.id,
 		};
 	}
 	else if (term.type === "APPLICATION")
@@ -120,7 +96,6 @@ function cloner(
 		return {
 			type: "APPLICATION",
 			id: IDGen(),
-			oldID: term.id,
 			left: cloner(term.left, reduxPt, sub, mapping, IDGen),
 			right: cloner(term.right, reduxPt, sub, mapping, IDGen),
 		};
@@ -133,7 +108,6 @@ function cloner(
 		return {
 			type: "ABSTRACTION",
 			id: IDGen(),
-			oldID: term.id,
 			param: newParam,
 			body: cloner(term.body, reduxPt, sub, mapping, IDGen),
 		};
@@ -183,12 +157,6 @@ export function stringifyLambda(
 			return `${left} ${right}`;
 		case "VARIABLE":
 			const symDep = mapping.get(term.id) ?? -1;
-			if (depth - symDep - 1 < 0)
-			{
-				console.log(depth, symDep, depth - symDep - 1)
-				console.log(term);
-				console.log(mapping);
-			}
 			return String(depth - symDep - 1);
 	}
 }

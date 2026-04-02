@@ -1,70 +1,90 @@
-export class Graph<T>
+interface GraphEdge
 {
-	private map = new Map<T, Set<T>>();
+	to: string,
+	reduxIndex: number,
+}
+
+export class Graph
+{
+	private map = new Map<string, GraphEdge[]>();
 
 	public getAllConnections()
 	{
 		return this.map.entries();
 	}
 
-	public getConnectionsOf(from: T): Set<T>
+	public getConnectionsOf(from: string): GraphEdge[]
 	{
 		let connections = this.map.get(from);
-		if (!connections) connections = new Set();
+		if (!connections) connections = [];
 		return connections;
 	}
 
-	public isConnected(from: T, to: T): boolean
+	public isConnected(from: string, to: string): boolean
 	{
 		const connections = this.map.get(from);
-		if (connections) return connections.has(to);
+		if (connections) return connections.some((edge) => edge.to === to);
 		return false;
 	}
 
-	/** Add node to graph without any connections */
-	public add(node: T): void
+	public add(key: string): void
 	{
-		if (!this.map.has(node))
+		if (!this.map.has(key))
 		{
-			this.map.set(node, new Set());
+			this.map.set(key, []);
 		}
 	}
 
-	public connect(from: T, to: T): void
+	public connect(from: string, to: string, reduxIndex: number): void
 	{
 		const connections = this.map.get(from);
-		if (connections) connections.add(to);
-		else this.map.set(from, new Set([to]));
+		const edge = { to, reduxIndex };
+		if (connections) connections.push(edge);
+		else this.map.set(from, [edge]);
 	}
 
-	public disconnect(from: T, to: T): void
+	public disconnect(from: string, to: string): boolean
 	{
 		const connections = this.map.get(from);
-		if (connections) connections.delete(to);
-	}
-
-	public biconnect(a: T, b: T): void
-	{
-		this.connect(a, b);
-		this.connect(b, a);
-	}
-
-	public bidisconnect(a: T, b: T): void
-	{
-		this.disconnect(a, b);
-		this.disconnect(b, a);
-	}
-
-	public toReversedEdges(): Graph<T>
-	{
-		const rev = new Graph<T>();
-
-		for (const [key, conns] of this.map)
+		if (connections)
 		{
-			for (const conn of conns)
+			for (let i = 0, len = connections.length, node; i < len; i++)
 			{
-				rev.add(conn);
-				rev.connect(conn, key);
+				node = connections[i];
+				if (node.to === to)
+				{
+					[connections[i], connections[len - 1]] = [connections[len - 1], connections[i]]
+					return true;
+				}
+			}
+		}
+
+		return true;
+	}
+
+	public getReduxPt(from: string, to: string): number
+	{
+		const edges = this.map.get(from);
+		if (edges)
+		{
+			for (const edge of edges)
+			{
+				if (edge.to === to) return edge.reduxIndex;
+			}
+		}
+		return -1;
+	}
+
+	public toReversedEdges(): Graph
+	{
+		const rev = new Graph();
+
+		for (const [key, edges] of this.map)
+		{
+			for (const edge of edges)
+			{
+				rev.add(edge.to);
+				rev.connect(edge.to, key, edge.reduxIndex);
 			}
 		}
 

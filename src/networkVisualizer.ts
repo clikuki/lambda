@@ -5,7 +5,7 @@ import { constructDiagram } from "./tromp.js";
 import { createSVG, pointOnRect } from "./utils.js";
 import { Vector } from "./vector.js";
 
-export interface NodeData
+export interface NetworkNode
 {
 	key: string;
 	svg: SVGElement;
@@ -26,11 +26,11 @@ export class Network
 		edgePad: 20,
 	}
 
-	public nodeMap = new Map<string, NodeData>();
+	public nodeMap = new Map<string, NetworkNode>();
 
 	constructor(
 		container: HTMLElement,
-		private graph: Graph<string>
+		private graph: Graph
 	)
 	{
 		this.display = new Display(container, false);
@@ -77,6 +77,22 @@ export class Network
 		this.updateEdges();
 	}
 
+	public findNodeAtPosition(x: number, y: number): NetworkNode | null
+	{
+		for (const [, node] of this.nodeMap)
+		{
+			const hw = node.width / 2;
+			const hh = node.height / 2;
+			if (x < node.pos.x - hw) continue;
+			if (x > node.pos.x + hw) continue;
+			if (y < node.pos.y - hh) continue;
+			if (y > node.pos.y + hh) continue;
+			return node;
+		}
+
+		return null;
+	}
+
 	private setLayers(): void
 	{
 		// clear old layer values
@@ -97,13 +113,13 @@ export class Network
 		const node = this.nodeMap.get(nodeKey)!;
 		node.pos.y = node.layer * 150 + 100;
 
-		for (const connKey of this.graph.getConnectionsOf(nodeKey))
+		for (const edge of this.graph.getConnectionsOf(nodeKey))
 		{
-			const conn = this.nodeMap.get(connKey)!;
+			const conn = this.nodeMap.get(edge.to)!;
 			if (conn.layer < node.layer + 1)
 			{
 				conn.layer = node.layer + 1;
-				this.updateLayerIndex(connKey);
+				this.updateLayerIndex(edge.to);
 			}
 		}
 	}
@@ -113,9 +129,9 @@ export class Network
 		const nodeKeys = this.graph.getAllConnections();
 		main: for (const [nodeKey, connKeys] of nodeKeys)
 		{
-			for (const connKey of connKeys)
+			for (const edge of connKeys)
 			{
-				if (this.graph.isConnected(connKey, nodeKey))
+				if (this.graph.isConnected(edge.to, nodeKey))
 				{
 					continue main;
 				}
@@ -133,7 +149,7 @@ export class Network
 	private orderLayerNodes(): void
 	{
 		// Find layers
-		const layers: NodeData[][] = []
+		const layers: NetworkNode[][] = []
 		for (const node of this.nodeMap.values())
 		{
 			node.pos.x = -1;
@@ -190,78 +206,78 @@ export class Network
 		}
 	}
 
-	private orderLayer(layer: NodeData[], incGraph: Graph<string>): void
-	{
-		// median ordering
-		for (const node of layer)
-		{
-			const incoming = incGraph.getConnectionsOf(node.key);
-			const incomingCnt = incoming.size;
+	// private orderLayer(layer: NetworkNode[], incGraph: Graph): void
+	// {
+	// 	// median ordering
+	// 	for (const node of layer)
+	// 	{
+	// 		const incoming = incGraph.getConnectionsOf(node.key);
+	// 		const incomingCnt = incoming.length;
 
-			if (!incomingCnt) node.pos.x = 0;
-			else
-			{
-				const incomingOrder = Array.from(incoming)
-					.map(k => this.nodeMap.get(k)!.pos.x)
-					.sort((a, b) => a - b);
-				const mean = incomingOrder
-					.reduce((acc, cur) => acc + cur / incomingCnt, 0);
+	// 		if (!incomingCnt) node.pos.x = 0;
+	// 		else
+	// 		{
+	// 			const incomingOrder = Array.from(incoming)
+	// 				.map(edge => this.nodeMap.get(edge.to)!.pos.x)
+	// 				.sort((a, b) => a - b);
+	// 			const mean = incomingOrder
+	// 				.reduce((acc, cur) => acc + cur / incomingCnt, 0);
 
-				node.pos.x = mean;
+	// 			node.pos.x = mean;
 
-				// const halfCnt = incomingCnt / 2;
-				// node.order = incomingOrder[Math.floor(halfCnt)];
-				// if (incomingCnt % 2 === 0)
-				// {
-				// 	node.order += incomingOrder[Math.ceil(halfCnt)];
-				// 	node.order /= 2;
-				// }
-			}
-		}
+	// 			// const halfCnt = incomingCnt / 2;
+	// 			// node.order = incomingOrder[Math.floor(halfCnt)];
+	// 			// if (incomingCnt % 2 === 0)
+	// 			// {
+	// 			// 	node.order += incomingOrder[Math.ceil(halfCnt)];
+	// 			// 	node.order /= 2;
+	// 			// }
+	// 		}
+	// 	}
 
-		// push apart overlapping nodes
-		layer.sort((a, b) => a.pos.x - b.pos.x);
+	// 	// push apart overlapping nodes
+	// 	layer.sort((a, b) => a.pos.x - b.pos.x);
 
-		const run: NodeData[] = [];
-		for (let i = 0, iter = 1000; i < layer.length; i++, iter--)
-		{
-			if (iter < 0) throw new Error("could not layout");
+	// 	const run: NetworkNode[] = [];
+	// 	for (let i = 0, iter = 1000; i < layer.length; i++, iter--)
+	// 	{
+	// 		if (iter < 0) throw new Error("could not layout");
 
-			const node = layer[i];
-			const front = layer[i + 1];
-			run.push(node);
+	// 		const node = layer[i];
+	// 		const front = layer[i + 1];
+	// 		run.push(node);
 
-			if (!front || node.pos.x + node.width / 2 <= front.pos.x - front.width / 2)
-			{
-				if (run.length > 1)
-				{
-					let center = 0, runWidth = 0;
-					for (let j = 0; j < run.length; j++)
-					{
-						const node = run[j];
-						center += node.pos.x;
-						runWidth += node.width + this.constants.gap;
-						if (j === 0 || j === run.length - 1) runWidth -= node.width / 2;
-					}
-					center /= run.length;
-					runWidth -= this.constants.gap;
+	// 		if (!front || node.pos.x + node.width / 2 <= front.pos.x - front.width / 2)
+	// 		{
+	// 			if (run.length > 1)
+	// 			{
+	// 				let center = 0, runWidth = 0;
+	// 				for (let j = 0; j < run.length; j++)
+	// 				{
+	// 					const node = run[j];
+	// 					center += node.pos.x;
+	// 					runWidth += node.width + this.constants.gap;
+	// 					if (j === 0 || j === run.length - 1) runWidth -= node.width / 2;
+	// 				}
+	// 				center /= run.length;
+	// 				runWidth -= this.constants.gap;
 
-					let x = center - runWidth / 2;
-					for (let j = 0; j < run.length; j++)
-					{
-						const node = run[j];
-						if (j) x += node.width / 2;
-						node.pos.x = x;
-						x += node.width / 2 + this.constants.gap;
-					}
+	// 				let x = center - runWidth / 2;
+	// 				for (let j = 0; j < run.length; j++)
+	// 				{
+	// 					const node = run[j];
+	// 					if (j) x += node.width / 2;
+	// 					node.pos.x = x;
+	// 					x += node.width / 2 + this.constants.gap;
+	// 				}
 
-					i = 0;
-				}
+	// 				i = 0;
+	// 			}
 
-				run.length = 0;
-			}
-		}
-	}
+	// 			run.length = 0;
+	// 		}
+	// 	}
+	// }
 
 	private updateNode(): void
 	{
@@ -277,9 +293,9 @@ export class Network
 		let edgePath = "";
 		for (const [aTerm, a] of this.nodeMap)
 		{
-			for (const bTerm of this.graph.getConnectionsOf(aTerm))
+			for (const edge of this.graph.getConnectionsOf(aTerm))
 			{
-				const b = this.nodeMap.get(bTerm)!;
+				const b = this.nodeMap.get(edge.to)!;
 				const aEdge = pointOnRect(
 					b.pos.x, b.pos.y,
 					a.pos.x - a.width * 0.5 - this.constants.edgePad,
