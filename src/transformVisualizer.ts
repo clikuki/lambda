@@ -4,7 +4,7 @@ import { findReductionPoints, parseLambda, performReduction, stringifyLambda } f
 import { Network } from "./networkVisualizer.js";
 import { constructDiagram, transitionSVG } from "./tromp.js";
 
-export class Transition
+export class Transformer
 {
 	public display: Display;
 	private currentTerm: string;
@@ -42,14 +42,14 @@ export class Transition
 	{
 		const currentLambda = parseLambda(this.currentTerm);
 		const reduxPt = findReductionPoints(currentLambda)[reduxIndex];
-		const nextLambda = performReduction(currentLambda, reduxPt);
+		const [nextLambda, traceMap] = performReduction(currentLambda, reduxPt);
 		const nextSVG = constructDiagram(nextLambda);
 
 		// REMEMBER TO DELETE; TESTING ONLY
 		this.display.addElement(nextSVG);
 		nextSVG.setAttribute("y", "100");
 
-		transitionSVG(this.currentSVG, nextSVG);
+		transitionSVG(this.currentSVG, nextSVG, traceMap);
 		this.currentTerm = stringifyLambda(nextLambda);
 		this.currentSVG = nextSVG;
 	}

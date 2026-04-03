@@ -22,6 +22,7 @@ export interface Variable extends LambdaNode
 	type: "VARIABLE";
 }
 export type Term = Application | Abstraction | Variable;
+export type TraceMap = Map<ID, ID[]>;
 
 export const FUNC_CHAR = "@";
 
@@ -52,9 +53,13 @@ export function findReductionPoints(
 	return reduxPts;
 }
 
-export function performReduction(root: Term, reduxPt: Application): Term
+export function performReduction(root: Term, reduxPt: Application): [Term, TraceMap]
 {
-	return cloner(root, reduxPt, null, undefined, undefined);
+	const traceMap: TraceMap = new Map();
+	return [
+		cloner(root, reduxPt, null, undefined, undefined, traceMap),
+		traceMap
+	];
 }
 
 function cloner(
@@ -63,6 +68,7 @@ function cloner(
 	sub: [ID, Term] | null = null,
 	mapping = new Map<ID, ID>(),
 	IDGen = getID(),
+	traceMap?: TraceMap,
 ): Term
 {
 	if (term === reduxPt)
@@ -72,19 +78,36 @@ function cloner(
 			"Left side of application must be an abstraction"
 		);
 
+		if (traceMap)
+		{
+			// signal to destroy element
+			traceMap.set(left.id, []);
+			traceMap.set(term.id, []);
+		}
+
 		return cloner(
-			left.body, null, [left.param, right], mapping, IDGen
+			left.body, null, [left.param, right], mapping, IDGen, traceMap
 		);
 	}
 
 	if (term.type === "VARIABLE")
 	{
-		if (sub && term.id === sub[0]) return cloner(
-			sub[1], null, null, mapping, IDGen
-		);
+		if (sub && term.id === sub[0])
+		{
+			// signal to destroy element
+			if (traceMap) traceMap.set(term.id, []);
+
+			return cloner(
+				sub[1], null, null, mapping, IDGen, traceMap
+			);
+		}
 
 		let newID = mapping.get(term.id);
-		if (!newID) mapping.set(term.id, newID = IDGen());
+		if (!newID)
+		{
+			mapping.set(term.id, newID = IDGen());
+			if (traceMap) addToMapList(traceMap, term.id, newID);
+		}
 
 		return {
 			type: "VARIABLE",
@@ -93,25 +116,42 @@ function cloner(
 	}
 	else if (term.type === "APPLICATION")
 	{
+		const newID = IDGen();
+		if (traceMap) addToMapList(traceMap, term.id, newID);
 		return {
 			type: "APPLICATION",
-			id: IDGen(),
-			left: cloner(term.left, reduxPt, sub, mapping, IDGen),
-			right: cloner(term.right, reduxPt, sub, mapping, IDGen),
+			id: newID,
+			left: cloner(term.left, reduxPt, sub, mapping, IDGen, traceMap),
+			right: cloner(term.right, reduxPt, sub, mapping, IDGen, traceMap),
 		};
 	}
 	else
 	{
-		let newParam = mapping.get(term.param);
-		if (!newParam) mapping.set(term.param, newParam = IDGen());
+		let newParamID = mapping.get(term.param);
+		if (!newParamID)
+		{
+			mapping.set(term.param, newParamID = IDGen());
+			console.log(term.param, newParamID)
+			if (traceMap) addToMapList(traceMap, term.param, newParamID);
+		}
+
+		const newID = IDGen();
+		if (traceMap) addToMapList(traceMap, term.id, newID);
 
 		return {
 			type: "ABSTRACTION",
-			id: IDGen(),
-			param: newParam,
-			body: cloner(term.body, reduxPt, sub, mapping, IDGen),
+			id: newID,
+			param: newParamID,
+			body: cloner(term.body, reduxPt, sub, mapping, IDGen, traceMap),
 		};
 	}
+}
+
+function addToMapList<T, U>(map: Map<T, U[]>, key: T, entry: U): void
+{
+	const list = map.get(key);
+	if (list) list.push(entry);
+	else map.set(key, [entry]);
 }
 
 export function code(

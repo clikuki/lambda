@@ -1,26 +1,25 @@
-import { type Term } from "./lambda.js";
+import { TraceMap, type Term } from "./lambda.js";
 import { createSVG, ID, setAttributes } from "./utils.js";
 
 const startTime = Date.now();
 
 interface ParamLine
 {
-	id: ID;
-	y: number;
+	absID: ID;
+	paramID: ID;
+	y?: number;
 }
 interface DiagramAbstraction
 {
 	type: "ABSTRACTION";
-	parameters: ID[];
+	parameters: ParamLine[];
 	body: DiagramApplication | DiagramVariable;
 	parent?: DiagramTerm;
-	id: ID;
 
 	x1?: number;
 	x2?: number;
 	y1?: number;
 	y2?: number;
-	paramLines?: ParamLine[];
 }
 interface DiagramApplication
 {
@@ -77,10 +76,10 @@ function buildTree(tree: Term): DiagramTerm
 	} else
 	{
 		// Find all parameters until first non-abstraction is hit
-		const parameters: ID[] = [];
+		const parameters: ParamLine[] = [];
 		const trueBody = (function findParameters(node = tree): Term
 		{
-			parameters.push(node.param);
+			parameters.push({ paramID: node.param, absID: node.id });
 			if (node.body.type === "ABSTRACTION") return findParameters(node.body);
 			else return node.body;
 		})();
@@ -89,7 +88,6 @@ function buildTree(tree: Term): DiagramTerm
 			type: "ABSTRACTION",
 			parameters,
 			body: buildTree(trueBody) as DiagramVariable,
-			id: parameters.at(-1)!,
 		};
 		node.body.parent = node;
 		return node;
@@ -105,7 +103,7 @@ function findRelevantAbstraction(node: DiagramTerm, id: ID)
 	{
 		if (current.type === "ABSTRACTION")
 		{
-			if (current.paramLines?.find((p) => p.id === id))
+			if (current.parameters?.find((p) => p.paramID === id))
 			{
 				binding = current;
 				break; // Stop once we find the binding abstraction
@@ -172,15 +170,11 @@ function computeHeights(t: DiagramTerm, y = 0)
 	{
 		case "ABSTRACTION":
 			t.y1 = y;
-			t.paramLines = t.parameters.map(id =>
+			for (const param of t.parameters)
 			{
-				const lineY = y + style.linewidth / 2;
+				param.y = y + style.linewidth / 2;
 				y += style.paramLineGap;
-				return {
-					y: lineY,
-					id,
-				} satisfies ParamLine;
-			});
+			}
 
 			computeHeights(t.body, y);
 
@@ -200,7 +194,7 @@ function computeHeights(t: DiagramTerm, y = 0)
 
 		case "VARIABLE":
 			const binding = findRelevantAbstraction(t, t.id);
-			const linePair = binding?.paramLines?.find((p) => p.id === t.id);
+			const linePair = binding?.parameters?.find((p) => p.paramID === t.id);
 			t.y1 = linePair?.y ?? y + style.applicationRowGap / 2;
 			t.y2 = y + style.applicationRowGap;
 			break;
@@ -363,19 +357,23 @@ function matchNodes(
 function animateAttributes(
 	mutations: (() => void)[],
 	mainEl: SVGElement,
-	sideEls: [SVGElement, ID?][],
+	sideEls: SVGElement[],
 	attributes: string[]
 )
 {
-	console.log(mainEl, sideEls);
 	const oldAttr = new Map(
 		attributes.map((attr) => [attr, mainEl.getAttribute(attr)!])
 	);
 
+	const oldID = mainEl.getAttribute("lambda-id");
+	if (oldID) oldAttr.set("lambda-id", oldID);
+
 	let isFirst = true;
 	const begin = `${Date.now() - startTime}ms`;
-	for (const [sideEl, newID] of sideEls)
+	for (const sideEl of sideEls)
 	{
+		const newID = sideEl.getAttribute("lambda-id")!;
+		console.log(oldID, " -> ", newID, sideEl)
 		const copy = isFirst ? mainEl : (mainEl.cloneNode() as SVGElement);
 		isFirst = false;
 
@@ -389,7 +387,7 @@ function animateAttributes(
 			const animate = createSVG("animate", {
 				attributeName: attr,
 				to: newValue,
-				dur: ".5s",
+				dur: "0.5s",
 				begin,
 				fill: "freeze",
 			});
@@ -404,7 +402,6 @@ function animateAttributes(
 
 		mutations.push(() =>
 		{
-			if (newID) copy.setAttribute("lambda-id", newID.str);
 			copy.append(...animations);
 			if (copy !== mainEl) mainEl.parentNode!.appendChild(copy);
 		});
@@ -431,11 +428,11 @@ function buildPath(tree: DiagramTerm): SVGElement
 		switch (node.type)
 		{
 			case "ABSTRACTION":
-				for (const line of node.paramLines!)
+				for (const line of node.parameters!)
 				{
 					container.appendChild(
 						createSVG("line", {
-							"lambda-id": line.id.str,
+							"lambda-id": line.absID.str,
 							x1: node.x1,
 							y1: line.y,
 							x2: node.x2,
@@ -481,81 +478,99 @@ function buildPath(tree: DiagramTerm): SVGElement
 export function transitionSVG(
 	before: SVGElement,
 	after: SVGElement,
+	traceMap: TraceMap,
 ): void
 {
 	const mutations: (() => void)[] = [];
-	const children = Array.from(before.children) as SVGElement[];
+	// const children = Array.from(before.children) as SVGElement[];
 
-	const changes: [Term, Term[]][] = [];
+	// const changes: [Term, Term[]][] = [];
 	// matchNodes(replacer.by!, replacer.at, changes);
 
 	// Update container size
 	animateAttributes(
 		mutations,
 		before,
-		[[after]],
+		[after],
 		["viewBox", "width", "height"]
 	)
 
-	// Update reduced terms
-	for (const [main, sides] of changes)
+	for (const [oldID, newIDList] of traceMap)
 	{
-		const mainEl = before.querySelector<SVGElement>(
-			`[lambda-id="${main.id.str}"]`
-		)!;
-		console.log(main.id.str, mainEl)
+		const oldEl = before.querySelector(`[lambda-id="${oldID.str}"]`) as SVGElement;
+		// TODO: Fix issue with breaking when trace has 
+		if (!oldEl) continue; // tmp fix
 
-		try
+		if (!newIDList.length)
 		{
-			if (sides.length > 0)
-			{
-				animateAttributes(
-					mutations,
-					mainEl,
-					sides.map((s) => [
-						after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
-						s.id,
-					]),
-					["x1", "x2", "y1", "y2"]
-				)
-			} else
-			{
-				// Argument not present after reducing, ex. (@x.a)b -> a
-				console.log("Not present: add", main.id.str);
-				mutations.push(() =>
-				{
-					console.log("Not present: delete", main.id.str);
-					mainEl.setAttribute("stroke", "transparent");
-					mainEl.addEventListener("transitionend", () => mainEl.remove());
-				});
-			}
-		} catch (err)
-		{
-			throw err;
-		}
-	}
-
-	// Update shuffled or deleted terms
-	for (const child of children)
-	{
-		const id = child.getAttribute("lambda-id")!;
-		const match = after.querySelector<SVGElement>(`[lambda-id="${id}"]`);
-
-		if (match)
-		{
-			animateAttributes(mutations, child, [[match]], ["x1", "x2", "y1", "y2"])
-		}
-		else if (!changes.find(([a]) => a.id.str === id))
-		{
-			console.log("Has not matched: add", id);
+			// Argument not present after reducing, ex. (@x.a)b -> a
 			mutations.push(() =>
 			{
-				console.log("Has not matched: delete", id);
-				child.setAttribute("stroke", "transparent");
-				child.addEventListener("transitionend", () => child.remove());
+				oldEl.setAttribute("stroke", "transparent");
+				oldEl.addEventListener("transitionend", () => oldEl.remove());
 			});
 		}
+		else
+		{
+			const newEls = newIDList.map(id => after.querySelector(`[lambda-id="${id.str}"]`) as SVGElement);
+			animateAttributes(mutations, oldEl, newEls, ["x1", "x2", "y1", "y2"]);
+		}
 	}
+
+	// // Update reduced terms
+	// for (const [main, sides] of changes)
+	// {
+	// 	const mainEl = before.querySelector<SVGElement>(
+	// 		`[lambda-id="${main.id.str}"]`
+	// 	)!;
+
+	// 	try
+	// 	{
+	// 		if (sides.length > 0)
+	// 		{
+	// 			animateAttributes(
+	// 				mutations,
+	// 				mainEl,
+	// 				sides.map((s) => [
+	// 					after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
+	// 					s.id,
+	// 				]),
+	// 				["x1", "x2", "y1", "y2"]
+	// 			)
+	// 		} else
+	// 		{
+	// 			// Argument not present after reducing, ex. (@x.a)b -> a
+	// 			mutations.push(() =>
+	// 			{
+	// 				mainEl.setAttribute("stroke", "transparent");
+	// 				mainEl.addEventListener("transitionend", () => mainEl.remove());
+	// 			});
+	// 		}
+	// 	} catch (err)
+	// 	{
+	// 		throw err;
+	// 	}
+	// }
+
+	// // Update shuffled or deleted terms
+	// for (const child of children)
+	// {
+	// 	const id = child.getAttribute("lambda-id")!;
+	// 	const match = after.querySelector<SVGElement>(`[lambda-id="${id}"]`);
+
+	// 	if (match)
+	// 	{
+	// 		animateAttributes(mutations, child, [[match]], ["x1", "x2", "y1", "y2"])
+	// 	}
+	// 	else if (!changes.find(([a]) => a.id.str === id))
+	// 	{
+	// 		mutations.push(() =>
+	// 		{
+	// 			child.setAttribute("stroke", "transparent");
+	// 			child.addEventListener("transitionend", () => child.remove());
+	// 		});
+	// 	}
+	// }
 
 	mutations.forEach((cb) => cb());
 }
