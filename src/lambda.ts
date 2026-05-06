@@ -62,6 +62,15 @@ export function performReduction(root: Term, reduxPt: Application): [Term, Trace
 	];
 }
 
+function groupLog<T>(data: any, cb: () => T): T
+{
+	data
+	// console.log(data);
+	// console.group(data);
+	const res = cb();
+	// console.groupEnd();
+	return res;
+}
 function cloner(
 	term: Term,
 	reduxPt: Application | null = null,
@@ -83,11 +92,12 @@ function cloner(
 			// signal to destroy element
 			traceMap.set(left.id, []);
 			traceMap.set(term.id, []);
+			addTreeEmpty(traceMap, right);
 		}
 
-		return cloner(
+		return groupLog("REDUX", () => cloner(
 			left.body, null, [left.param, right], mapping, IDGen, traceMap
-		);
+		));
 	}
 
 	if (term.type === "VARIABLE")
@@ -97,9 +107,9 @@ function cloner(
 			// signal to destroy element
 			if (traceMap) traceMap.set(term.id, []);
 
-			return cloner(
+			return groupLog("SUB", () => cloner(
 				sub[1], null, null, mapping, IDGen, traceMap
-			);
+			));
 		}
 
 		let newID = mapping.get(term.id);
@@ -109,6 +119,7 @@ function cloner(
 			if (traceMap) addToMapList(traceMap, term.id, newID);
 		}
 
+		console.log("VARIABLE");
 		return {
 			type: "VARIABLE",
 			id: newID,
@@ -118,12 +129,12 @@ function cloner(
 	{
 		const newID = IDGen();
 		if (traceMap) addToMapList(traceMap, term.id, newID);
-		return {
+		return groupLog("APPLICATION", () => ({
 			type: "APPLICATION",
 			id: newID,
-			left: cloner(term.left, reduxPt, sub, mapping, IDGen, traceMap),
-			right: cloner(term.right, reduxPt, sub, mapping, IDGen, traceMap),
-		};
+			left: groupLog("LEFT", () => cloner(term.left, reduxPt, sub, mapping, IDGen, traceMap)),
+			right: groupLog("RIGHT", () => cloner(term.right, reduxPt, sub, mapping, IDGen, traceMap)),
+		}));
 	}
 	else
 	{
@@ -131,7 +142,7 @@ function cloner(
 		if (!newParamID)
 		{
 			mapping.set(term.param, newParamID = IDGen());
-			console.log(term.param, newParamID)
+			// console.log(term.param, newParamID)
 			if (traceMap) addToMapList(traceMap, term.param, newParamID);
 		}
 
@@ -142,16 +153,30 @@ function cloner(
 			type: "ABSTRACTION",
 			id: newID,
 			param: newParamID,
-			body: cloner(term.body, reduxPt, sub, mapping, IDGen, traceMap),
+			body: groupLog("ABSTRACTION", () => cloner(term.body, reduxPt, sub, mapping, IDGen, traceMap)),
 		};
 	}
 }
 
-function addToMapList<T, U>(map: Map<T, U[]>, key: T, entry: U): void
+function addToMapList(map: Map<ID, ID[]>, key: ID, entry: ID): void
 {
 	const list = map.get(key);
 	if (list) list.push(entry);
 	else map.set(key, [entry]);
+}
+function addTreeEmpty(map: Map<ID, ID[]>, term: Term): void
+{
+	map.set(term.id, []);
+	switch (term.type)
+	{
+		case "APPLICATION":
+			addTreeEmpty(map, term.left);
+			addTreeEmpty(map, term.right);
+			break;
+		case "ABSTRACTION":
+			addTreeEmpty(map, term.body);
+			break;
+	}
 }
 
 export function code(

@@ -45,9 +45,9 @@ export class Transformer
 		const [nextLambda, traceMap] = performReduction(currentLambda, reduxPt);
 		const nextSVG = constructDiagram(nextLambda);
 
-		// REMEMBER TO DELETE; TESTING ONLY
-		this.display.addElement(nextSVG);
-		nextSVG.setAttribute("y", "100");
+		// // REMEMBER TO DELETE; TESTING ONLY
+		// this.display.addElement(nextSVG);
+		// nextSVG.setAttribute("y", "100");
 
 		transitionSVG(this.currentSVG, nextSVG, traceMap);
 		this.currentTerm = stringifyLambda(nextLambda);

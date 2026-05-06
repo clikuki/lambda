@@ -318,44 +318,8 @@ function getTreeSize(tree: DiagramTerm): [number, number]
 	return [height, width];
 }
 
-function matchNodes(
-	main: Term,
-	sides: Term[],
-	matches: [Term, Term[]][],
-)
-{
-	matches.push([main, sides]);
-	switch (main.type)
-	{
-		case "ABSTRACTION":
-			matchNodes(
-				main.body,
-				sides.map((s) =>
-				{
-					if (s.type !== main.type) throw Error("Side tree does not match");
-					return s.body;
-				}),
-				matches,
-			);
-			break;
-		case "APPLICATION":
-			for (const branch of ["left", "right"] as const)
-			{
-				matchNodes(
-					main[branch],
-					sides.map((s) =>
-					{
-						if (s.type !== "APPLICATION") throw Error("Side tree does not match");
-						return s[branch];
-					}),
-					matches,
-				);
-			}
-	}
-}
-
 function animateAttributes(
-	mutations: (() => void)[],
+	mutations: (() => Promise<any>)[],
 	mainEl: SVGElement,
 	sideEls: SVGElement[],
 	attributes: string[]
@@ -378,6 +342,7 @@ function animateAttributes(
 		isFirst = false;
 
 		const newAttr: Record<string, string> = {};
+		const animationEnds: (Promise<void>)[] = [];
 		const animations = attributes.flatMap((attr) =>
 		{
 			const newValue = sideEl.getAttribute(attr) ?? "";
@@ -392,11 +357,15 @@ function animateAttributes(
 				fill: "freeze",
 			});
 
-			animate.addEventListener("endEvent", () =>
+			animationEnds.push(new Promise<void>(res =>
 			{
-				setAttributes(copy, newAttr);
-				animate.remove();
-			});
+				animate.addEventListener("endEvent", () =>
+				{
+					res();
+					setAttributes(copy, newAttr);
+					animate.remove();
+				}, { once: true });
+			}));
 			return animate;
 		});
 
@@ -404,6 +373,7 @@ function animateAttributes(
 		{
 			copy.append(...animations);
 			if (copy !== mainEl) mainEl.parentNode!.appendChild(copy);
+			return Promise.allSettled(animationEnds);
 		});
 	}
 
@@ -479,100 +449,52 @@ export function transitionSVG(
 	before: SVGElement,
 	after: SVGElement,
 	traceMap: TraceMap,
-): void
+): Promise<void>
 {
-	const mutations: (() => void)[] = [];
-	// const children = Array.from(before.children) as SVGElement[];
-
-	// const changes: [Term, Term[]][] = [];
-	// matchNodes(replacer.by!, replacer.at, changes);
-
-	// Update container size
-	animateAttributes(
-		mutations,
-		before,
-		[after],
-		["viewBox", "width", "height"]
-	)
-
-	for (const [oldID, newIDList] of traceMap)
+	return new Promise<void>((res) =>
 	{
-		const oldEl = before.querySelector(`[lambda-id="${oldID.str}"]`) as SVGElement;
-		// TODO: Fix issue with breaking when trace has 
-		if (!oldEl) continue; // tmp fix
+		const mutations: (() => Promise<any>)[] = [];
 
-		if (!newIDList.length)
+		// Update container size
+		animateAttributes(
+			mutations,
+			before,
+			[after],
+			["viewBox", "width", "height"]
+		)
+
+		for (const [oldID, newIDList] of traceMap)
 		{
-			// Argument not present after reducing, ex. (@x.a)b -> a
-			mutations.push(() =>
+			const oldEl = before.querySelector(`[lambda-id="${oldID.str}"]`) as SVGElement;
+			// TODO: Fix issue with breaking when trace has nonexistent ID
+			if (!oldEl) continue; // tmp fix
+
+			if (!newIDList.length)
 			{
-				oldEl.setAttribute("stroke", "transparent");
-				oldEl.addEventListener("transitionend", () => oldEl.remove());
-			});
+				// Argument not present after reducing, ex. (@x.a)b -> a
+				mutations.push(() =>
+				{
+					return new Promise<void>((res) =>
+					{
+						oldEl.setAttribute("stroke", "transparent");
+						oldEl.addEventListener("transitionend", () =>
+						{
+							oldEl.remove();
+							res();
+						}, { once: true });
+					})
+				});
+			}
+			else
+			{
+				const newEls = newIDList.map(id => after.querySelector(`[lambda-id="${id.str}"]`) as SVGElement);
+				animateAttributes(mutations, oldEl, newEls, ["x1", "x2", "y1", "y2"]);
+			}
 		}
-		else
-		{
-			const newEls = newIDList.map(id => after.querySelector(`[lambda-id="${id.str}"]`) as SVGElement);
-			animateAttributes(mutations, oldEl, newEls, ["x1", "x2", "y1", "y2"]);
-		}
-	}
 
-	// // Update reduced terms
-	// for (const [main, sides] of changes)
-	// {
-	// 	const mainEl = before.querySelector<SVGElement>(
-	// 		`[lambda-id="${main.id.str}"]`
-	// 	)!;
-
-	// 	try
-	// 	{
-	// 		if (sides.length > 0)
-	// 		{
-	// 			animateAttributes(
-	// 				mutations,
-	// 				mainEl,
-	// 				sides.map((s) => [
-	// 					after.querySelector<SVGElement>(`[lambda-id="${s.id.str}"]`)!,
-	// 					s.id,
-	// 				]),
-	// 				["x1", "x2", "y1", "y2"]
-	// 			)
-	// 		} else
-	// 		{
-	// 			// Argument not present after reducing, ex. (@x.a)b -> a
-	// 			mutations.push(() =>
-	// 			{
-	// 				mainEl.setAttribute("stroke", "transparent");
-	// 				mainEl.addEventListener("transitionend", () => mainEl.remove());
-	// 			});
-	// 		}
-	// 	} catch (err)
-	// 	{
-	// 		throw err;
-	// 	}
-	// }
-
-	// // Update shuffled or deleted terms
-	// for (const child of children)
-	// {
-	// 	const id = child.getAttribute("lambda-id")!;
-	// 	const match = after.querySelector<SVGElement>(`[lambda-id="${id}"]`);
-
-	// 	if (match)
-	// 	{
-	// 		animateAttributes(mutations, child, [[match]], ["x1", "x2", "y1", "y2"])
-	// 	}
-	// 	else if (!changes.find(([a]) => a.id.str === id))
-	// 	{
-	// 		mutations.push(() =>
-	// 		{
-	// 			child.setAttribute("stroke", "transparent");
-	// 			child.addEventListener("transitionend", () => child.remove());
-	// 		});
-	// 	}
-	// }
-
-	mutations.forEach((cb) => cb());
+		Promise.allSettled(mutations.map((cb) => cb()))
+			.then(() => res());
+	});
 }
 
 export function constructDiagram(term: Term): SVGElement

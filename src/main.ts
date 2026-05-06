@@ -28,9 +28,9 @@ const graph = new Graph();
 const seed = //
 	// code`${Expr.ADD}${Expr.numeral(1)}${Expr.numeral(1)}`;
 	// code`${Expr.EXP}${Expr.numeral(2)}${Expr.numeral(2)}`;
-	// code`${Expr.PRED}${Expr.numeral(2)}`;
-	code`${Expr.TRUE} (@ 0) (@@ 0)`;
-// code`(@ 0)(@ 0)`;
+	code`${Expr.PRED}${Expr.numeral(2)}`;
+// code`${Expr.TRUE} (@ 0) (@@ 0)`;
+// code`(@@ 0)(@@ 0)`;
 // code`${Expr.SUB}${Expr.numeral(4)}${Expr.numeral(2)}`;
 // "(@@ 1) (@0) (@0)";
 // "(@0 0 0)(@0 0 0)";
@@ -70,12 +70,12 @@ function lambdaExpander(): boolean
 
 			console.log(term);
 			console.log(reduxed);
-			// for (const [from, to] of traceMap.entries())
-			// {
-			// 	console.log(from, " : ");
-			// 	to.forEach(t => console.log(t));
-			// }
-			// console.log("=========")
+			for (const [from, to] of traceMap.entries())
+			{
+				console.log(from, " : ");
+				to.forEach(t => console.log(t));
+			}
+			console.log("=========")
 
 			graph.add(bStr);
 			graph.connect(aStr, bStr, i);
